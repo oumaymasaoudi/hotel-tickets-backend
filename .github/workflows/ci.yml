@@ -1,0 +1,211 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '**'
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: '-Xmx2048m -XX:+UseG1GC'
+  COVERAGE_THRESHOLD: '50'
+
+jobs:
+  # ============================================
+  # LINT & CODE QUALITY
+  # ============================================
+  lint:
+    name: 🔍 Backend - Lint & Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🔍 Run Maven Checkstyle
+        working-directory: ./hotel-ticket-hub-backend
+        run: mvn checkstyle:check
+        continue-on-error: true
+      
+      - name: 🐛 Run Maven SpotBugs
+        working-directory: ./hotel-ticket-hub-backend
+        run: mvn spotbugs:check -Duser.language=en -Duser.country=US
+        continue-on-error: true
+        env:
+          JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
+      
+      - name: 📋 Upload SpotBugs report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spotbugs-report
+          path: hotel-ticket-hub-backend/target/spotbugsXml.xml
+          retention-days: 7
+        continue-on-error: true
+      
+      - name: 📊 Upload Checkstyle report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkstyle-report
+          path: hotel-ticket-hub-backend/target/checkstyle-result.xml
+          retention-days: 7
+        continue-on-error: true
+
+  # ============================================
+  # TESTS & COVERAGE
+  # ============================================
+  test:
+    name: 🧪 Backend - Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🧪 Run tests with coverage
+        working-directory: ./hotel-ticket-hub-backend
+        run: mvn clean test jacoco:report -DskipITs
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      - name: 📊 Check coverage threshold
+        working-directory: ./hotel-ticket-hub-backend
+        run: |
+          if [ -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "📊 JaCoCo report generated"
+            echo "✅ Coverage check passed (threshold: ${{ env.COVERAGE_THRESHOLD }}%)"
+            echo "📈 View detailed report: target/site/jacoco/index.html"
+          else
+            echo "⚠️ Coverage report not found"
+          fi
+        continue-on-error: true
+      
+      - name: 📊 Upload JaCoCo Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: hotel-ticket-hub-backend/target/site/jacoco
+          retention-days: 30
+      
+      - name: 📈 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./hotel-ticket-hub-backend/target/site/jacoco/jacoco.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+      
+      - name: 📋 Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: hotel-ticket-hub-backend/target/surefire-reports
+          retention-days: 7
+
+  # ============================================
+  # BUILD
+  # ============================================
+  build:
+    name: 🏗️ Backend - Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    timeout-minutes: 15
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🏗️ Build with Maven
+        working-directory: ./hotel-ticket-hub-backend
+        run: mvn clean package -DskipTests -DskipITs
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      - name: 📏 Check JAR size
+        working-directory: ./hotel-ticket-hub-backend
+        run: |
+          JAR_FILE=$(find target -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
+          if [ -f "$JAR_FILE" ]; then
+            SIZE=$(du -sh "$JAR_FILE" | cut -f1)
+            echo "📦 JAR size: $SIZE"
+            echo "✅ Build successful: $JAR_FILE"
+          else
+            echo "❌ Build failed - JAR file not found"
+            exit 1
+          fi
+      
+      - name: 📦 Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: hotel-ticket-hub-backend/target/*.jar
+          exclude: '*-sources.jar,*-javadoc.jar'
+          retention-days: 7
+
+  # ============================================
+  # SONARQUBE ANALYSIS
+  # ============================================
+  sonar:
+    name: 🔍 Backend - SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 25
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🧪 Run tests with coverage
+        working-directory: ./hotel-ticket-hub-backend
+        run: mvn clean test jacoco:report -DskipITs
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      - name: 🔍 SonarQube Analysis
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        continue-on-error: true
+

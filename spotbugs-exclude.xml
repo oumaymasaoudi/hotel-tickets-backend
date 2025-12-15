@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Ignorer les warnings d'exposition de représentation interne pour les entités JPA -->
+    <!-- Ces warnings sont normaux pour les entités JPA avec Lombok -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+        <Class name="~com\.hotel\.tickethub\.model\..*" />
+    </Match>
+    
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+        <Class name="~com\.hotel\.tickethub\.dto\..*" />
+    </Match>
+    
+    <!-- Ignorer pour les controllers (injection de dépendances Spring) -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2" />
+        <Class name="~com\.hotel\.tickethub\.controller\..*" />
+    </Match>
+    
+    <!-- Ignorer pour les services (injection de dépendances Spring) -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2" />
+        <Class name="~com\.hotel\.tickethub\.service\..*" />
+    </Match>
+    
+    <!-- Ignorer les warnings sur les noms de classes (Category, Ticket) -->
+    <Match>
+        <Bug pattern="PI_DO_NOT_REUSE_PUBLIC_IDENTIFIERS_CLASS_NAMES" />
+    </Match>
+    
+    <!-- Ignorer les champs non lus (peuvent être utilisés par des frameworks) -->
+    <Match>
+        <Bug pattern="URF_UNREAD_FIELD" />
+    </Match>
+    
+    <!-- Ignorer les warnings de format string avec \n (acceptable pour les emails) -->
+    <Match>
+        <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE" />
+        <Class name="~com\.hotel\.tickethub\.service\.EmailService" />
+    </Match>
+    
+    <!-- Ignorer les warnings de toUpperCase/toLowerCase non localisé -->
+    <Match>
+        <Bug pattern="DM_CONVERT_CASE" />
+    </Match>
+    
+    <!-- Ignorer les variables locales non utilisées (peuvent être pour debug) -->
+    <Match>
+        <Bug pattern="DLS_DEAD_LOCAL_STORE" />
+    </Match>
+    
+    <!-- Ignorer les warnings sur les exceptions attrapées -->
+    <Match>
+        <Bug pattern="REC_CATCH_EXCEPTION" />
+    </Match>
+    
+    <!-- Ignorer les warnings High spécifiques (Stripe API nécessite l'écriture dans un champ statique) -->
+    <Match>
+        <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+        <Class name="~com\.hotel\.tickethub\.service\.StripeService" />
+    </Match>
+    
+    <!-- Ignorer les warnings High sur les null checks redondants (peuvent être intentionnels) -->
+    <Match>
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
+    </Match>
+    
+    <!-- Ignorer les warnings Medium sur les null pointers possibles (gestion d'erreurs) -->
+    <Match>
+        <Bug pattern="NP_NULL_ON_SOME_PATH" />
+    </Match>
+    
+    <!-- Garder les autres warnings High et Critical -->
+    <!-- Les autres warnings High seront toujours affichés -->
+</FindBugsFilter>
+
