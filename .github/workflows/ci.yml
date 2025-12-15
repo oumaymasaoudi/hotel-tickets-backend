@@ -37,12 +37,10 @@ jobs:
           cache: 'maven'
       
       - name: 🔍 Run Maven Checkstyle
-        working-directory: ./hotel-ticket-hub-backend
         run: mvn checkstyle:check
         continue-on-error: true
       
       - name: 🐛 Run Maven SpotBugs
-        working-directory: ./hotel-ticket-hub-backend
         run: mvn spotbugs:check -Duser.language=en -Duser.country=US
         continue-on-error: true
         env:
@@ -53,7 +51,7 @@ jobs:
         if: always()
         with:
           name: spotbugs-report
-          path: hotel-ticket-hub-backend/target/spotbugsXml.xml
+          path: target/spotbugsXml.xml
           retention-days: 7
         continue-on-error: true
       
@@ -62,7 +60,7 @@ jobs:
         if: always()
         with:
           name: checkstyle-report
-          path: hotel-ticket-hub-backend/target/checkstyle-result.xml
+          path: target/checkstyle-result.xml
           retention-days: 7
         continue-on-error: true
 
@@ -86,13 +84,11 @@ jobs:
           cache: 'maven'
       
       - name: 🧪 Run tests with coverage
-        working-directory: ./hotel-ticket-hub-backend
         run: mvn clean test jacoco:report -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       - name: 📊 Check coverage threshold
-        working-directory: ./hotel-ticket-hub-backend
         run: |
           if [ -f "target/site/jacoco/jacoco.xml" ]; then
             echo "📊 JaCoCo report generated"
@@ -107,13 +103,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
-          path: hotel-ticket-hub-backend/target/site/jacoco
+          path: target/site/jacoco
           retention-days: 30
       
       - name: 📈 Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          files: ./hotel-ticket-hub-backend/target/site/jacoco/jacoco.xml
+          files: ./target/site/jacoco/jacoco.xml
           flags: backend
           name: backend-coverage
           fail_ci_if_error: false
@@ -123,7 +119,7 @@ jobs:
         if: always()
         with:
           name: test-reports
-          path: hotel-ticket-hub-backend/target/surefire-reports
+          path: target/surefire-reports
           retention-days: 7
 
   # ============================================
@@ -147,13 +143,11 @@ jobs:
           cache: 'maven'
       
       - name: 🏗️ Build with Maven
-        working-directory: ./hotel-ticket-hub-backend
         run: mvn clean package -DskipTests -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       - name: 📏 Check JAR size
-        working-directory: ./hotel-ticket-hub-backend
         run: |
           JAR_FILE=$(find target -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
           if [ -f "$JAR_FILE" ]; then
@@ -169,7 +163,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
-          path: hotel-ticket-hub-backend/target/*.jar
+          path: target/*.jar
           exclude: '*-sources.jar,*-javadoc.jar'
           retention-days: 7
 
@@ -197,7 +191,6 @@ jobs:
           cache: 'maven'
       
       - name: 🧪 Run tests with coverage
-        working-directory: ./hotel-ticket-hub-backend
         run: mvn clean test jacoco:report -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
