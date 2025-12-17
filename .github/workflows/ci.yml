@@ -21,32 +21,32 @@ jobs:
   # LINT & CODE QUALITY
   # ============================================
   lint:
-    name: 🔍 Backend - Lint & Code Quality
+    name: Backend - Lint & Code Quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: 🔍 Run Maven Checkstyle
+      - name: Run Maven Checkstyle
         run: mvn checkstyle:check
         continue-on-error: true
       
-      - name: 🐛 Run Maven SpotBugs
+      - name: Run Maven SpotBugs
         run: mvn spotbugs:check -Duser.language=en -Duser.country=US
         continue-on-error: true
         env:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
       
-      - name: 📋 Upload SpotBugs report
+      - name: Upload SpotBugs report
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,7 +55,7 @@ jobs:
           retention-days: 7
         continue-on-error: true
       
-      - name: 📊 Upload Checkstyle report
+      - name: Upload Checkstyle report
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -65,56 +65,30 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # TESTS & COVERAGE
+  # TESTS
   # ============================================
   test:
-    name: 🧪 Backend - Unit Tests & Coverage
+    name: Backend - Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: 🧪 Run tests with coverage
-        run: mvn clean test jacoco:report -DskipITs
+      - name: Run tests
+        run: mvn clean test -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
-      - name: 📊 Check coverage threshold
-        run: |
-          if [ -f "target/site/jacoco/jacoco.xml" ]; then
-            echo "📊 JaCoCo report generated"
-            echo "✅ Coverage check passed (threshold: ${{ env.COVERAGE_THRESHOLD }}%)"
-            echo "📈 View detailed report: target/site/jacoco/index.html"
-          else
-            echo "⚠️ Coverage report not found"
-          fi
-        continue-on-error: true
-      
-      - name: 📊 Upload JaCoCo Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacoco-report
-          path: target/site/jacoco
-          retention-days: 30
-      
-      - name: 📈 Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./target/site/jacoco/jacoco.xml
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: false
-      
-      - name: 📋 Upload test reports
+      - name: Upload test reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -123,43 +97,89 @@ jobs:
           retention-days: 7
 
   # ============================================
-  # BUILD
+  # COVERAGE
   # ============================================
-  build:
-    name: 🏗️ Backend - Build
+  coverage:
+    name: Backend - Code Coverage
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [test]
     timeout-minutes: 15
     
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: 🏗️ Build with Maven
+      - name: Generate coverage report
+        run: mvn clean test jacoco:report -DskipITs
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      - name: Check coverage threshold
+        run: mvn jacoco:check
+        continue-on-error: true
+      
+      - name: Upload JaCoCo Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+          retention-days: 30
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  # ============================================
+  # BUILD
+  # ============================================
+  build:
+    name: Backend - Build
+    runs-on: ubuntu-latest
+    needs: [lint, test, coverage]
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Build with Maven
         run: mvn clean package -DskipTests -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
-      - name: 📏 Check JAR size
+      - name: Check JAR size
         run: |
           JAR_FILE=$(find target -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
           if [ -f "$JAR_FILE" ]; then
             SIZE=$(du -sh "$JAR_FILE" | cut -f1)
-            echo "📦 JAR size: $SIZE"
-            echo "✅ Build successful: $JAR_FILE"
+            echo "JAR size: $SIZE"
+            echo "Build successful: $JAR_FILE"
           else
-            echo "❌ Build failed - JAR file not found"
+            echo "Build failed - JAR file not found"
             exit 1
           fi
       
-      - name: 📦 Upload JAR artifact
+      - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
@@ -171,31 +191,31 @@ jobs:
   # SONARQUBE ANALYSIS
   # ============================================
   sonar:
-    name: 🔍 Backend - SonarQube Analysis
+    name: Backend - SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [coverage]
     timeout-minutes: 25
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: 🧪 Run tests with coverage
+      - name: Run tests with coverage
         run: mvn clean test jacoco:report -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
-      - name: 🔍 SonarQube Analysis
+      - name: SonarQube Analysis
         uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
