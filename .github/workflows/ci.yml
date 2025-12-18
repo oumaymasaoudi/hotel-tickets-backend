@@ -117,7 +117,7 @@ jobs:
           cache: 'maven'
       
       - name: Generate coverage report
-        run: mvn clean test jacoco:report -DskipITs
+        run: mvn -B clean test jacoco:report -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -210,15 +210,14 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: Run tests with coverage
-        run: mvn clean test jacoco:report -DskipITs
+      - name: SonarCloud Analysis (Maven)
+        run: |
+          mvn -B clean verify sonar:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
-      
-      - name: SonarQube Analysis
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         continue-on-error: true
 
