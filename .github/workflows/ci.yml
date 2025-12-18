@@ -121,10 +121,6 @@ jobs:
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
-      - name: Check coverage threshold
-        run: mvn jacoco:check
-        continue-on-error: true
-      
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
         with:
