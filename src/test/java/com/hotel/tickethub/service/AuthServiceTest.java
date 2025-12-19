@@ -12,9 +12,10 @@ import com.hotel.tickethub.repository.UserRoleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -36,7 +37,8 @@ class AuthServiceTest {
     @Mock
     private HotelRepository hotelRepository;
 
-    @InjectMocks
+    private PasswordEncoder passwordEncoder;
+
     private AuthService authService;
 
     private Hotel testHotel;
@@ -47,6 +49,9 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        passwordEncoder = new BCryptPasswordEncoder();
+        authService = new AuthService(userRepository, userRoleRepository, hotelRepository, passwordEncoder);
+
         testHotelId = UUID.randomUUID();
         testUserId = UUID.randomUUID();
 
@@ -57,7 +62,7 @@ class AuthServiceTest {
         testUser = new User();
         testUser.setId(testUserId);
         testUser.setEmail("test@example.com");
-        testUser.setPassword("password123");
+        testUser.setPassword(passwordEncoder.encode("password123"));
         testUser.setFullName("Test User");
         testUser.setIsActive(true);
         testUser.setHotel(testHotel);

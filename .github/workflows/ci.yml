@@ -233,13 +233,23 @@ jobs:
           name: jacoco-report
           path: target/site/jacoco
       
+      - name: Generate JaCoCo Report (if not exists)
+        run: |
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            mvn -B jacoco:report
+          fi
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+        continue-on-error: true
+      
       - name: SonarCloud Analysis (Maven)
         run: |
           mvn -B sonar:sonar \
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
         continue-on-error: true

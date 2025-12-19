@@ -10,6 +10,7 @@ import com.hotel.tickethub.repository.HotelRepository;
 import com.hotel.tickethub.repository.UserRepository;
 import com.hotel.tickethub.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final HotelRepository hotelRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -41,7 +43,7 @@ public class AuthService {
 
         User user = new User();
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword()); // No encoding
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
         user.setIsActive(true);
@@ -122,8 +124,8 @@ public class AuthService {
         UserRole userRole = userRoleRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new RuntimeException("User role not found. Contact administrator."));
 
-        // Password verification without security
-        if (!user.getPassword().equals(request.getPassword())) {
+        // Password verification with BCrypt
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             // Rule 13: Increment failed attempts
             int attempts = (user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0) + 1;
             user.setFailedLoginAttempts(attempts);
@@ -199,7 +201,7 @@ public class AuthService {
 
         User user = new User();
         user.setEmail(email);
-        user.setPassword(password); // In production, use PasswordEncoder
+        user.setPassword(passwordEncoder.encode(password));
         user.setFullName(fullName);
         user.setIsActive(true);
 
