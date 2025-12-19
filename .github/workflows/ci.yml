@@ -227,17 +227,15 @@ jobs:
           name: test-classes-jacoco
           path: target
       
-      - name: Download JaCoCo Report
+      - name: Download JaCoCo Report (if exists)
         uses: actions/download-artifact@v4
         with:
           name: jacoco-report
           path: target/site/jacoco
+        continue-on-error: true
       
-      - name: Generate JaCoCo Report (if not exists)
-        run: |
-          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
-            mvn -B jacoco:report
-          fi
+      - name: Generate JaCoCo Report
+        run: mvn -B jacoco:report
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
         continue-on-error: true
