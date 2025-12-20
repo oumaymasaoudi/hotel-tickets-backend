@@ -51,7 +51,7 @@ public class StripeController {
         } catch (Exception e) {
             // Erreur inattendue
             Map<String, String> error = new HashMap<>();
-            error.put("error", "Erreur lors de la création de la session Stripe: " + e.getMessage());
+            error.put(ERROR_KEY, "Erreur lors de la création de la session Stripe: " + e.getMessage());
             e.printStackTrace(); // Logger l'erreur complète
             return ResponseEntity.status(500).body(error);
         }

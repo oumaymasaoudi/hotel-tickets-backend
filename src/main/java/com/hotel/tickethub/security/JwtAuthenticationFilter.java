@@ -25,32 +25,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (jwt != null && !jwt.isEmpty()) {
-                String username = tokenProvider.extractUsername(jwt);
-
-                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    // Extraire les authorities du JWT
-                    var claims = tokenProvider.extractAllClaims(jwt);
-                    var authoritiesList = claims.get("authorities", java.util.List.class);
-                    java.util.List<org.springframework.security.core.GrantedAuthority> authorities = new java.util.ArrayList<>();
-                    if (authoritiesList != null) {
-                        for (Object authority : authoritiesList) {
-                            authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(
-                                    authority.toString()));
-                        }
-                    }
-                    org.springframework.security.core.userdetails.User userDetails = new org.springframework.security.core.userdetails.User(
-                            username,
-                            "",
-                            authorities);
-
-                    if (tokenProvider.validateToken(jwt, userDetails)) {
-                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                                userDetails, null, authorities);
-                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
-                    }
-                }
+            if (isValidJwt(jwt)) {
+                processJwtAuthentication(jwt, request);
             }
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);
@@ -65,5 +41,44 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
         return null;
+    }
+
+    private boolean isValidJwt(String jwt) {
+        return jwt != null && !jwt.isEmpty();
+    }
+
+    private void processJwtAuthentication(String jwt, HttpServletRequest request) {
+        String username = tokenProvider.extractUsername(jwt);
+        if (username == null || SecurityContextHolder.getContext().getAuthentication() != null) {
+            return;
+        }
+
+        var claims = tokenProvider.extractAllClaims(jwt);
+        var authoritiesList = claims.get("authorities", java.util.List.class);
+        java.util.List<org.springframework.security.core.GrantedAuthority> authorities = extractAuthorities(authoritiesList);
+
+        org.springframework.security.core.userdetails.User userDetails = new org.springframework.security.core.userdetails.User(
+                username,
+                "",
+                authorities);
+
+        boolean isValidToken = tokenProvider.validateToken(jwt, userDetails);
+        if (isValidToken) {
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails, null, authorities);
+            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+    }
+
+    private java.util.List<org.springframework.security.core.GrantedAuthority> extractAuthorities(java.util.List<?> authoritiesList) {
+        java.util.List<org.springframework.security.core.GrantedAuthority> authorities = new java.util.ArrayList<>();
+        if (authoritiesList != null) {
+            for (Object authority : authoritiesList) {
+                authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        authority.toString()));
+            }
+        }
+        return authorities;
     }
 }

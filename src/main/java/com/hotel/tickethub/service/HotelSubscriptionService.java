@@ -73,9 +73,11 @@ public class HotelSubscriptionService {
      * Ajouter une catégorie supplémentaire
      * Règle 3: Catégories supplémentaires moyennant frais
      */
+    private static final String SUBSCRIPTION_NOT_FOUND_MESSAGE = "Abonnement non trouvé";
+
     public HotelSubscription addAdditionalCategory(UUID subscriptionId, UUID categoryId) {
         HotelSubscription subscription = subscriptionRepository.findById(subscriptionId)
-            .orElseThrow(() -> new RuntimeException("Abonnement non trouvé"));
+            .orElseThrow(() -> new RuntimeException(SUBSCRIPTION_NOT_FOUND_MESSAGE));
 
         Category category = categoryRepository.findById(categoryId)
             .orElseThrow(() -> new RuntimeException("Catégorie non trouvée"));
@@ -89,7 +91,7 @@ public class HotelSubscriptionService {
      */
     public HotelSubscription removeAdditionalCategory(UUID subscriptionId, UUID categoryId) {
         HotelSubscription subscription = subscriptionRepository.findById(subscriptionId)
-            .orElseThrow(() -> new RuntimeException("Abonnement non trouvé"));
+            .orElseThrow(() -> new RuntimeException(SUBSCRIPTION_NOT_FOUND_MESSAGE));
 
         subscription.getAdditionalCategories()
             .removeIf(c -> c.getId().equals(categoryId));
@@ -103,9 +105,9 @@ public class HotelSubscriptionService {
      */
     public HotelSubscription changePlan(UUID subscriptionId, UUID newPlanId) {
         HotelSubscription subscription = subscriptionRepository.findById(subscriptionId)
-            .orElseThrow(() -> new RuntimeException("Abonnement non trouvé"));
+            .orElseThrow(() -> new RuntimeException(SUBSCRIPTION_NOT_FOUND_MESSAGE));
 
-        Plan newPlan = planRepository.findById(newPlanId)
+        planRepository.findById(newPlanId)
             .orElseThrow(() -> new RuntimeException("Plan non trouvé"));
 
         // Marquer comme changement en attente
@@ -146,7 +148,7 @@ public class HotelSubscriptionService {
      * Pour vérifier si on dépasse la limite du plan
      */
     public int getTechnicianCount(UUID hotelId) {
-        return (int) hotelRepository.findById(hotelId)
+        return hotelRepository.findById(hotelId)
             .map(hotel -> (int) hotel.getUsers().stream()
                 .filter(user -> user.getUserRoles().stream()
                     .anyMatch(role -> "TECHNICIAN".equals(role.getRole().toString())))
