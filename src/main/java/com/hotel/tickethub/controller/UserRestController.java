@@ -11,6 +11,7 @@ import com.hotel.tickethub.repository.HotelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public class UserRestController {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final HotelRepository hotelRepository;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * GET /api/users - Get all users (SuperAdmin only)
@@ -98,7 +100,7 @@ public class UserRestController {
     public ResponseEntity<UserResponse> createUser(@RequestBody UserRequest request) {
         User user = new User();
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword()); // No encoding
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
         user.setIsActive(true);
@@ -174,7 +176,7 @@ public class UserRestController {
             }
 
             if (request.containsKey("password") && !request.get("password").isEmpty()) {
-                user.setPassword(request.get("password"));
+                user.setPassword(passwordEncoder.encode(request.get("password")));
             }
 
             user = userRepository.save(user);
@@ -252,7 +254,8 @@ public class UserRestController {
             // Create user
             User user = new User();
             user.setEmail(email);
-            user.setPassword(password != null && !password.isEmpty() ? password : "Technician123!"); // Default password
+            String rawPassword = password != null && !password.isEmpty() ? password : "Technician123!";
+            user.setPassword(passwordEncoder.encode(rawPassword));
             user.setFullName(fullName);
             user.setPhone(phone);
             user.setIsActive(true);
