@@ -40,7 +40,7 @@ jobs:
         continue-on-error: true
       
       - name: Run Maven SpotBugs
-        run: mvn spotbugs:check -Duser.language=en -Duser.country=US
+        run: mvn spotbugs:spotbugs -Duser.language=en -Duser.country=US
         continue-on-error: true
         env:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
@@ -52,6 +52,7 @@ jobs:
           name: spotbugs-report
           path: target/spotbugsXml.xml
           retention-days: 7
+          if-no-files-found: ignore
         continue-on-error: true
       
       - name: Upload Checkstyle report
@@ -191,12 +192,23 @@ jobs:
             exit 1
           fi
       
+      - name: Prepare JAR artifact
+        run: |
+          mkdir -p artifacts
+          JAR_FILE=$(find target -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
+          if [ -f "$JAR_FILE" ]; then
+            cp "$JAR_FILE" artifacts/
+            echo "JAR artifact prepared: $(basename $JAR_FILE)"
+          else
+            echo "No JAR file found"
+            exit 1
+          fi
+      
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
-          path: target/*.jar
-          exclude: '*-sources.jar,*-javadoc.jar'
+          path: artifacts/*.jar
           retention-days: 7
 
   # ============================================
@@ -238,7 +250,16 @@ jobs:
         run: mvn -B jacoco:report
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
-        continue-on-error: true
+      
+      - name: Verify JaCoCo Report exists
+        run: |
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "ERROR: JaCoCo report not found!"
+            exit 1
+          else
+            echo "JaCoCo report found: target/site/jacoco/jacoco.xml"
+            ls -lh target/site/jacoco/
+          fi
       
       - name: SonarCloud Analysis (Maven)
         run: |
