@@ -138,6 +138,12 @@ jobs:
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
+      - name: Check coverage threshold
+        run: mvn -B jacoco:check
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+        continue-on-error: true
+      
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
         with:
@@ -237,13 +243,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: test-classes-jacoco
-          path: target
+          path: .
       
       - name: Download JaCoCo Report (if exists)
         uses: actions/download-artifact@v4
         with:
           name: jacoco-report
-          path: target/site/jacoco
+          path: .
         continue-on-error: true
       
       - name: Generate JaCoCo Report
@@ -261,10 +267,10 @@ jobs:
             ls -lh target/site/jacoco/
           fi
       
-      - name: SonarCloud Analysis (GitHub Action)
-        uses: sonarsource/sonarcloud-github-action@master
+      - name: SonarQube Analysis
+        uses: sonarsource/sonarqube-scan-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
         continue-on-error: true
 
