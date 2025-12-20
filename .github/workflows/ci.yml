@@ -248,14 +248,30 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: test-classes-jacoco
-          path: .
+          path: target
+      
+      - name: Verify downloaded artifacts
+        run: |
+          echo "=== Checking downloaded artifacts ==="
+          ls -la target/classes/ | head -5 || echo "No classes found"
+          ls -la target/test-classes/ | head -5 || echo "No test-classes found"
+          ls -la target/jacoco.exec || echo "No jacoco.exec found"
       
       - name: Download JaCoCo Report (if exists)
         uses: actions/download-artifact@v4
         with:
           name: jacoco-report
-          path: .
+          path: target
         continue-on-error: true
+      
+      - name: Check if JaCoCo report already exists
+        run: |
+          if [ -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "JaCoCo report already exists from coverage job"
+            ls -lh target/site/jacoco/jacoco.xml
+          else
+            echo "JaCoCo report not found, will generate it"
+          fi
       
       - name: Generate JaCoCo Report
         run: mvn -B jacoco:report
@@ -265,11 +281,14 @@ jobs:
       - name: Verify JaCoCo Report exists
         run: |
           if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
-            echo "ERROR: JaCoCo report not found!"
+            echo "ERROR: JaCoCo report not found after generation!"
+            echo "Checking target directory structure:"
+            find target -name "*.xml" -o -name "jacoco*" | head -10
             exit 1
           else
             echo "JaCoCo report found: target/site/jacoco/jacoco.xml"
             ls -lh target/site/jacoco/
+            echo "Report size: $(du -h target/site/jacoco/jacoco.xml)"
           fi
       
       - name: SonarQube Analysis
