@@ -165,9 +165,25 @@ public class TicketService {
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
+            // String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            // Path filePath = uploadPath.resolve(fileName);
+            // Sanitize filename: extract only the base filename to prevent path traversal
+            String originalFilename = file.getOriginalFilename();
+            String safeFilename = originalFilename != null
+                    ? Paths.get(originalFilename).getFileName().toString()
+                    : "file";
+            // Remove any remaining dangerous characters
+            safeFilename = safeFilename.replaceAll("[^a-zA-Z0-9._-]", "_");
 
-            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            Path filePath = uploadPath.resolve(fileName);
+            String fileName = UUID.randomUUID() + "_" + safeFilename;
+            Path filePath = uploadPath.resolve(fileName).normalize();
+
+            // Additional security check: ensure the resolved path is within the upload
+            // directory
+            if (!filePath.startsWith(uploadPath.normalize())) {
+                throw new SecurityException("Invalid file path detected");
+            }
+
             Files.copy(file.getInputStream(), filePath);
 
             TicketImage ticketImage = new TicketImage();
