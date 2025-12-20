@@ -19,7 +19,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Endpoints pour la gestion des paiements
@@ -50,7 +49,7 @@ public class PaymentRestController {
     public ResponseEntity<List<PaymentResponse>> getPaymentHistory(@PathVariable UUID hotelId) {
         List<PaymentResponse> payments = paymentService.getPaymentHistory(hotelId).stream()
             .map(this::toPaymentResponse)
-            .collect(Collectors.toList());
+            .toList();
         return ResponseEntity.ok(payments);
     }
 
@@ -100,7 +99,7 @@ public class PaymentRestController {
 
         List<PaymentResponse> payments = paymentService.getPaymentsByPeriod(hotelId, start, end).stream()
             .map(this::toPaymentResponse)
-            .collect(Collectors.toList());
+            .toList();
 
         double totalAmount = paymentService.getTotalPaymentAmount(hotelId, start, end);
 
@@ -180,7 +179,7 @@ public class PaymentRestController {
     public ResponseEntity<List<PaymentResponse>> getOverduePayments() {
         List<PaymentResponse> payments = paymentService.getOverduePayments().stream()
             .map(this::toPaymentResponse)
-            .collect(Collectors.toList());
+            .toList();
         return ResponseEntity.ok(payments);
     }
 
@@ -194,7 +193,7 @@ public class PaymentRestController {
     public ResponseEntity<List<PaymentResponse>> getAllPayments() {
         List<PaymentResponse> payments = paymentService.getAllPayments().stream()
             .map(this::toPaymentResponse)
-            .collect(Collectors.toList());
+            .toList();
         return ResponseEntity.ok(payments);
     }
 
@@ -215,9 +214,11 @@ public class PaymentRestController {
             .build();
     }
 
+    private static final String DEFAULT_CLIENT_IP = "0.0.0.0";
+
     private String getClientIp() {
         // À implémenter pour récupérer l'IP du client
-        return "0.0.0.0";
+        return DEFAULT_CLIENT_IP;
     }
 }
 

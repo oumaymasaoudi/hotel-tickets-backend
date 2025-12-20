@@ -113,7 +113,7 @@ public class AuditLogService {
     public List<AuditLog> getAllLogs() {
         return auditLogRepository.findAll().stream()
             .sorted((l1, l2) -> l2.getTimestamp().compareTo(l1.getTimestamp()))
-            .collect(java.util.stream.Collectors.toList());
+            .toList();
     }
 
     /**

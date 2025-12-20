@@ -27,7 +27,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<Object> register(@Valid @RequestBody RegisterRequest request) {
         try {
             return ResponseEntity.ok(authService.register(request));
         } catch (Exception e) {
@@ -36,7 +36,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<Object> login(@Valid @RequestBody LoginRequest request) {
         try {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(response);
@@ -73,7 +73,7 @@ public class AuthController {
      * }
      */
     @PostMapping("/create-superadmin")
-    public ResponseEntity<?> createSuperAdmin(
+    public ResponseEntity<Object> createSuperAdmin(
             @RequestParam(required = false) String secret,
             @RequestBody Map<String, String> request) {
 
