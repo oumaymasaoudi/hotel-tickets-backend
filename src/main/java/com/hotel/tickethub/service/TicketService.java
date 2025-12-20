@@ -37,44 +37,42 @@ public class TicketService {
 
     @Transactional
     public TicketResponse createTicket(CreateTicketRequest request, List<MultipartFile> images) {
-        try {
-            Hotel hotel = hotelRepository.findById(request.getHotelId())
-                    .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + request.getHotelId()));
+        Hotel hotel = hotelRepository.findById(request.getHotelId())
+                .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + request.getHotelId()));
 
-            Category category = categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("Category not found with ID: " + request.getCategoryId()));
+        Category category = categoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new RuntimeException("Category not found with ID: " + request.getCategoryId()));
 
-            // Vérifier que l'hôtel a un plan
-            if (hotel.getPlan() == null) {
-                throw new RuntimeException(
-                        "Hotel does not have a subscription plan. Please assign a plan to the hotel.");
-            }
-
-            Ticket ticket = new Ticket();
-            ticket.setTicketNumber(generateTicketNumber());
-            ticket.setHotel(hotel);
-            ticket.setCategory(category);
-            ticket.setClientEmail(request.getClientEmail());
-            ticket.setClientPhone(request.getClientPhone());
-            ticket.setDescription(request.getDescription());
-            ticket.setStatus(TicketStatus.OPEN);
-            ticket.setIsUrgent(Boolean.TRUE.equals(request.getIsUrgent()));
-
-            // Calculate SLA deadline based on hotel plan
-            int slaHours = hotel.getPlan().getSlaHours();
-            ticket.setSlaDeadline(LocalDateTime.now().plusHours(slaHours));
-
-            ticket = ticketRepository.save(ticket);
-
-            // Save images if provided
-            if (images != null && !images.isEmpty()) {
-                for (MultipartFile image : images) {
-                    saveTicketImage(ticket, image);
-                }
-            }
-
-            return convertToResponse(ticket);
+        // Vérifier que l'hôtel a un plan
+        if (hotel.getPlan() == null) {
+            throw new RuntimeException(
+                    "Hotel does not have a subscription plan. Please assign a plan to the hotel.");
         }
+
+        Ticket ticket = new Ticket();
+        ticket.setTicketNumber(generateTicketNumber());
+        ticket.setHotel(hotel);
+        ticket.setCategory(category);
+        ticket.setClientEmail(request.getClientEmail());
+        ticket.setClientPhone(request.getClientPhone());
+        ticket.setDescription(request.getDescription());
+        ticket.setStatus(TicketStatus.OPEN);
+        ticket.setIsUrgent(Boolean.TRUE.equals(request.getIsUrgent()));
+
+        // Calculate SLA deadline based on hotel plan
+        int slaHours = hotel.getPlan().getSlaHours();
+        ticket.setSlaDeadline(LocalDateTime.now().plusHours(slaHours));
+
+        ticket = ticketRepository.save(ticket);
+
+        // Save images if provided
+        if (images != null && !images.isEmpty()) {
+            for (MultipartFile image : images) {
+                saveTicketImage(ticket, image);
+            }
+        }
+
+        return convertToResponse(ticket);
     }
 
     public TicketResponse getTicketByNumber(String ticketNumber) {
