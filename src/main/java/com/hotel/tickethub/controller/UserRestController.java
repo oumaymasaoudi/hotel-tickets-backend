@@ -18,13 +18,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 @CrossOrigin(origins = { "http://localhost:8080", "http://localhost:8081", "http://localhost:5173" })
 public class UserRestController {
+
+    private static final String EMAIL_KEY = "email";
+    private static final String FULL_NAME_KEY = "fullName";
+    private static final String PHONE_KEY = "phone";
+    private static final String PASSWORD_KEY = "password";
 
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
@@ -39,7 +43,7 @@ public class UserRestController {
     public ResponseEntity<List<UserResponse>> getAllUsers() {
         List<UserResponse> users = userRepository.findAll().stream()
                 .map(this::toUserResponse)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(users);
     }
 
@@ -79,7 +83,7 @@ public class UserRestController {
             return ResponseEntity.ok(technicians);
         } catch (Exception e) {
             // Return empty list instead of 500 error
-            return ResponseEntity.ok(List.of());
+            return ResponseEntity.status(HttpStatus.OK).body(List.of());
         }
     }
 
@@ -139,7 +143,7 @@ public class UserRestController {
      */
     @PutMapping("/technicians/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-    public ResponseEntity<?> updateTechnician(@PathVariable UUID id, @RequestBody Map<String, String> request) {
+    public ResponseEntity<Object> updateTechnician(@PathVariable UUID id, @RequestBody Map<String, String> request) {
         try {
             User user = userRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Technician not found"));
@@ -153,8 +157,8 @@ public class UserRestController {
             }
 
             // Update provided fields
-            if (request.containsKey("email")) {
-                String newEmail = request.get("email");
+            if (request.containsKey(EMAIL_KEY)) {
+                String newEmail = request.get(EMAIL_KEY);
                 // Check email doesn't already exist (except for this user)
                 if (!user.getEmail().equals(newEmail) && userRepository.existsByEmail(newEmail)) {
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -163,20 +167,20 @@ public class UserRestController {
                 user.setEmail(newEmail);
             }
 
-            if (request.containsKey("fullName")) {
-                user.setFullName(request.get("fullName"));
+            if (request.containsKey(FULL_NAME_KEY)) {
+                user.setFullName(request.get(FULL_NAME_KEY));
             }
 
-            if (request.containsKey("phone")) {
-                user.setPhone(request.get("phone"));
+            if (request.containsKey(PHONE_KEY)) {
+                user.setPhone(request.get(PHONE_KEY));
             }
 
             if (request.containsKey("isActive")) {
                 user.setIsActive(Boolean.parseBoolean(request.get("isActive")));
             }
 
-            if (request.containsKey("password") && !request.get("password").isEmpty()) {
-                user.setPassword(passwordEncoder.encode(request.get("password")));
+            if (request.containsKey(PASSWORD_KEY) && !request.get(PASSWORD_KEY).isEmpty()) {
+                user.setPassword(passwordEncoder.encode(request.get(PASSWORD_KEY)));
             }
 
             user = userRepository.save(user);
@@ -193,7 +197,7 @@ public class UserRestController {
      */
     @DeleteMapping("/technicians/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-    public ResponseEntity<?> deleteTechnician(@PathVariable UUID id) {
+    public ResponseEntity<Object> deleteTechnician(@PathVariable UUID id) {
         try {
             User user = userRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Technician not found"));
@@ -227,12 +231,12 @@ public class UserRestController {
      */
     @PostMapping("/technicians")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-    public ResponseEntity<?> createTechnician(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Object> createTechnician(@RequestBody Map<String, String> request) {
         try {
-            String email = request.get("email");
-            String password = request.get("password");
-            String fullName = request.get("fullName");
-            String phone = request.get("phone");
+            String email = request.get(EMAIL_KEY);
+            String password = request.get(PASSWORD_KEY);
+            String fullName = request.get(FULL_NAME_KEY);
+            String phone = request.get(PHONE_KEY);
             String hotelIdStr = request.get("hotelId");
 
             if (email == null || fullName == null || hotelIdStr == null) {

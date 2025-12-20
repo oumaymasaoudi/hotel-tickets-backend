@@ -13,7 +13,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TicketImageDTO {
     private UUID id;
-    private String storage_path;
-    private String file_name;
+    private String storagePath;
+    private String fileName;
 }
 

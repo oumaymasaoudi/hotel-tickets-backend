@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,7 +21,7 @@ public class CategoryService {
         return categoryRepository.findAll()
                 .stream()
                 .map(this::convertToDTO)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public CategoryDTO getCategoryById(UUID id) {
@@ -42,7 +41,7 @@ public class CategoryService {
         category.setName(request.getName());
         category.setIcon(request.getIcon() != null ? request.getIcon() : "Package");
         category.setColor(request.getColor() != null ? request.getColor() : "#6C757D");
-        category.setIsMandatory(request.getIsMandatory() != null ? request.getIsMandatory() : false);
+        category.setIsMandatory(Boolean.TRUE.equals(request.getIsMandatory()));
         category.setAdditionalCost(request.getAdditionalCost() != null ? request.getAdditionalCost() : BigDecimal.ZERO);
 
         Category saved = categoryRepository.save(category);

@@ -15,10 +15,12 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String ERROR_KEY = "error";
+
     @ExceptionHandler(StripeException.class)
     public ResponseEntity<Map<String, String>> handleStripeException(StripeException e) {
         Map<String, String> error = new HashMap<>();
-        error.put("error", "Stripe error: " + e.getMessage());
+        error.put(ERROR_KEY, "Stripe error: " + e.getMessage());
         error.put("type", e.getClass().getSimpleName());
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -33,16 +35,16 @@ public class GlobalExceptionHandler {
         if (errorMessage != null) {
             if (errorMessage.contains("Stripe") || errorMessage.contains("payment")
                     || errorMessage.contains("subscription")) {
-                error.put("error", errorMessage);
+                error.put(ERROR_KEY, errorMessage);
             } else if (errorMessage.contains("Plan") || errorMessage.contains("plan")) {
-                error.put("error", errorMessage);
+                error.put(ERROR_KEY, errorMessage);
             } else if (errorMessage.contains("Hotel") || errorMessage.contains("hotel")) {
-                error.put("error", errorMessage);
+                error.put(ERROR_KEY, errorMessage);
             } else {
-                error.put("error", "Error: " + errorMessage);
+                error.put(ERROR_KEY, "Error: " + errorMessage);
             }
         } else {
-            error.put("error", "An error occurred");
+            error.put(ERROR_KEY, "An error occurred");
         }
 
         error.put("message", errorMessage);

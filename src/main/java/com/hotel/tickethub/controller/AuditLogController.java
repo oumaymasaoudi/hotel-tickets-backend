@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/audit-logs")
@@ -35,7 +34,7 @@ public class AuditLogController {
         List<AuditLog> logs = auditLogService.getAllLogs();
         List<AuditLogDTO> dtos = logs.stream()
                 .map(this::convertToDTO)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(dtos);
     }
 
@@ -49,7 +48,7 @@ public class AuditLogController {
         List<AuditLog> logs = auditLogService.getHotelHistory(hotelId);
         List<AuditLogDTO> dtos = logs.stream()
                 .map(this::convertToDTO)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(dtos);
     }
 
@@ -63,7 +62,7 @@ public class AuditLogController {
         List<AuditLog> logs = auditLogService.getLogsByAction(action);
         List<AuditLogDTO> dtos = logs.stream()
                 .map(this::convertToDTO)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(dtos);
     }
 

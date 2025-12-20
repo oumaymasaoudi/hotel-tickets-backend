@@ -21,6 +21,8 @@ import java.util.UUID;
 })
 public class StripeController {
 
+    private static final String ERROR_KEY = "error";
+
     private final StripeService stripeService;
 
     /**
@@ -38,13 +40,13 @@ public class StripeController {
         } catch (com.stripe.exception.StripeException e) {
             // Erreur spécifique Stripe
             Map<String, String> error = new HashMap<>();
-            error.put("error", "Erreur Stripe: " + e.getMessage());
+            error.put(ERROR_KEY, "Erreur Stripe: " + e.getMessage());
             error.put("type", e.getClass().getSimpleName());
             return ResponseEntity.status(400).body(error);
         } catch (RuntimeException e) {
             // Erreur de validation ou autre
             Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
+            error.put(ERROR_KEY, e.getMessage());
             return ResponseEntity.status(400).body(error);
         } catch (Exception e) {
             // Erreur inattendue
@@ -72,7 +74,7 @@ public class StripeController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
-            error.put("error", e.getMessage());
+            error.put(ERROR_KEY, e.getMessage());
             return ResponseEntity.status(500).body(error);
         }
     }

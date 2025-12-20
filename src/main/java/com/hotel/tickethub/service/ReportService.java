@@ -22,6 +22,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReportService {
 
+    private static final String TOTAL_TICKETS_KEY = "totalTickets";
+    private static final String OPEN_TICKETS_KEY = "openTickets";
+    private static final String IN_PROGRESS_TICKETS_KEY = "inProgressTickets";
+    private static final String RESOLVED_TICKETS_KEY = "resolvedTickets";
+    private static final String HOTEL_NAME_KEY = "hotelName";
+    private static final String AVERAGE_RESOLUTION_TIME_HOURS_KEY = "averageResolutionTimeHours";
+
     private final TicketRepository ticketRepository;
     private final HotelRepository hotelRepository;
     private final UserRepository userRepository;
@@ -67,17 +74,17 @@ public class ReportService {
 
         // Statistiques globales
         List<Ticket> allTickets = ticketRepository.findByCreatedAtBetween(startDate, endDate);
-        report.put("totalTickets", allTickets.size());
-        report.put("openTickets", countByStatus(allTickets, TicketStatus.OPEN));
-        report.put("inProgressTickets", countByStatus(allTickets, TicketStatus.IN_PROGRESS));
-        report.put("resolvedTickets", countByStatus(allTickets, TicketStatus.RESOLVED));
+        report.put(TOTAL_TICKETS_KEY, allTickets.size());
+        report.put(OPEN_TICKETS_KEY, countByStatus(allTickets, TicketStatus.OPEN));
+        report.put(IN_PROGRESS_TICKETS_KEY, countByStatus(allTickets, TicketStatus.IN_PROGRESS));
+        report.put(RESOLVED_TICKETS_KEY, countByStatus(allTickets, TicketStatus.RESOLVED));
         report.put("closedTickets", countByStatus(allTickets, TicketStatus.CLOSED));
         report.put("urgentTickets", allTickets.stream().filter(Ticket::getIsUrgent).count());
 
         // Statistiques par hôtel
         List<Map<String, Object>> hotelStats = hotels.stream()
                 .map(hotel -> generateHotelStats(hotel, startDate, endDate))
-                .collect(Collectors.toList());
+                .toList();
         report.put("hotels", hotelStats);
 
         // Performances techniciens
@@ -100,23 +107,23 @@ public class ReportService {
         Map<String, Object> report = new HashMap<>();
         report.put("type", type);
         report.put("hotelId", hotelId);
-        report.put("hotelName", hotel.getName());
+        report.put(HOTEL_NAME_KEY, hotel.getName());
         report.put("period", Map.of("start", startDate, "end", endDate));
         report.put("generatedAt", LocalDateTime.now());
 
         // Tickets dans la période
         List<Ticket> tickets = ticketRepository.findByHotelIdAndCreatedAtBetween(hotelId, startDate, endDate);
 
-        report.put("totalTickets", tickets.size());
-        report.put("openTickets", countByStatus(tickets, TicketStatus.OPEN));
-        report.put("inProgressTickets", countByStatus(tickets, TicketStatus.IN_PROGRESS));
-        report.put("resolvedTickets", countByStatus(tickets, TicketStatus.RESOLVED));
+        report.put(TOTAL_TICKETS_KEY, tickets.size());
+        report.put(OPEN_TICKETS_KEY, countByStatus(tickets, TicketStatus.OPEN));
+        report.put(IN_PROGRESS_TICKETS_KEY, countByStatus(tickets, TicketStatus.IN_PROGRESS));
+        report.put(RESOLVED_TICKETS_KEY, countByStatus(tickets, TicketStatus.RESOLVED));
         report.put("closedTickets", countByStatus(tickets, TicketStatus.CLOSED));
         report.put("urgentTickets", tickets.stream().filter(Ticket::getIsUrgent).count());
 
         // Temps moyen de résolution
         double avgResolutionTime = calculateAverageResolutionTime(tickets);
-        report.put("averageResolutionTimeHours", avgResolutionTime);
+        report.put(AVERAGE_RESOLUTION_TIME_HOURS_KEY, avgResolutionTime);
 
         // Performances techniciens
         List<Map<String, Object>> technicianStats = generateTechnicianStatsForHotel(hotelId, startDate, endDate);
@@ -132,7 +139,7 @@ public class ReportService {
                     paymentMap.put("status", p.getStatus());
                     return paymentMap;
                 })
-                .collect(Collectors.toList());
+                .toList();
         report.put("recentPayments", recentPayments);
 
         // Prochain paiement
@@ -173,14 +180,14 @@ public class ReportService {
                     Map<String, Object> stats = new HashMap<>();
                     stats.put("technicianId", entry.getKey());
                     stats.put("technicianName", technician != null ? technician.getFullName() : "Inconnu");
-                    stats.put("totalTickets", techTickets.size());
-                    stats.put("resolvedTickets", countByStatus(techTickets, TicketStatus.RESOLVED));
-                    stats.put("inProgressTickets", countByStatus(techTickets, TicketStatus.IN_PROGRESS));
-                    stats.put("averageResolutionTimeHours", calculateAverageResolutionTime(techTickets));
+                    stats.put(TOTAL_TICKETS_KEY, techTickets.size());
+                    stats.put(RESOLVED_TICKETS_KEY, countByStatus(techTickets, TicketStatus.RESOLVED));
+                    stats.put(IN_PROGRESS_TICKETS_KEY, countByStatus(techTickets, TicketStatus.IN_PROGRESS));
+                    stats.put(AVERAGE_RESOLUTION_TIME_HOURS_KEY, calculateAverageResolutionTime(techTickets));
 
                     return stats;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<Map<String, Object>> generateTechnicianStats(LocalDateTime startDate, LocalDateTime endDate) {
@@ -202,13 +209,13 @@ public class ReportService {
                             .findFirst()
                             .map(t -> t.getHotel().getName())
                             .orElse("N/A"));
-                    stats.put("totalTickets", techTickets.size());
-                    stats.put("resolvedTickets", countByStatus(techTickets, TicketStatus.RESOLVED));
-                    stats.put("averageResolutionTimeHours", calculateAverageResolutionTime(techTickets));
+                    stats.put(TOTAL_TICKETS_KEY, techTickets.size());
+                    stats.put(RESOLVED_TICKETS_KEY, countByStatus(techTickets, TicketStatus.RESOLVED));
+                    stats.put(AVERAGE_RESOLUTION_TIME_HOURS_KEY, calculateAverageResolutionTime(techTickets));
 
                     return stats;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private Map<String, Object> generateHotelStats(Hotel hotel, LocalDateTime startDate, LocalDateTime endDate) {
@@ -216,10 +223,10 @@ public class ReportService {
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("hotelId", hotel.getId());
-        stats.put("hotelName", hotel.getName());
-        stats.put("totalTickets", tickets.size());
-        stats.put("openTickets", countByStatus(tickets, TicketStatus.OPEN));
-        stats.put("resolvedTickets", countByStatus(tickets, TicketStatus.RESOLVED));
+        stats.put(HOTEL_NAME_KEY, hotel.getName());
+        stats.put(TOTAL_TICKETS_KEY, tickets.size());
+        stats.put(OPEN_TICKETS_KEY, countByStatus(tickets, TicketStatus.OPEN));
+        stats.put(RESOLVED_TICKETS_KEY, countByStatus(tickets, TicketStatus.RESOLVED));
         stats.put("isActive", hotel.getIsActive());
 
         return stats;

@@ -89,7 +89,7 @@ public class PaymentService {
     public List<Payment> getAllPayments() {
         return paymentRepository.findAll().stream()
             .sorted((p1, p2) -> p2.getPaymentDate().compareTo(p1.getPaymentDate()))
-            .collect(java.util.stream.Collectors.toList());
+            .toList();
     }
 
     /**
