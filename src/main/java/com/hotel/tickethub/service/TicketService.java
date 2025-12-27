@@ -161,8 +161,7 @@ public class TicketService {
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
-            // String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            // Path filePath = uploadPath.resolve(fileName);
+
             // Sanitize filename: extract only the base filename to prevent path traversal
             String originalFilename = file.getOriginalFilename();
             String safeFilename = originalFilename != null

@@ -205,7 +205,7 @@ public class ReportService {
                     Map<String, Object> stats = new HashMap<>();
                     stats.put("technicianId", entry.getKey());
                     stats.put("technicianName", technician != null ? technician.getFullName() : "Inconnu");
-                    stats.put("hotelName", techTickets.stream()
+                    stats.put(HOTEL_NAME_KEY, techTickets.stream()
                             .findFirst()
                             .map(t -> t.getHotel().getName())
                             .orElse("N/A"));

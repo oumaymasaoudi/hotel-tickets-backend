@@ -120,6 +120,10 @@ public class AuditLogService {
      * Actions standards à logger
      */
     public static final class ActionType {
+        private ActionType() {
+            // Utility class
+        }
+
         public static final String CREATE_TICKET = "CREATE_TICKET";
         public static final String UPDATE_TICKET = "UPDATE_TICKET";
         public static final String ASSIGN_TICKET = "ASSIGN_TICKET";
@@ -140,6 +144,10 @@ public class AuditLogService {
      * Entités standards
      */
     public static final class EntityType {
+        private EntityType() {
+            // Utility class
+        }
+
         public static final String TICKET = "Ticket";
         public static final String PAYMENT = "Payment";
         public static final String USER = "User";
