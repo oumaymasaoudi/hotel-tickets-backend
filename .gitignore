@@ -81,3 +81,9 @@ build/
 # local secrets
 src/main/resources/application.properties
 
+# SSH Keys (NE JAMAIS COMMITER!)
+github-actions-key
+github-actions-key.pub
+*.pem
+*.key
+
