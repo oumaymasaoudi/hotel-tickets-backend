@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ${DOCKER_IMAGE:-ticket-hub-backend:latest}
+    container_name: hotel-ticket-hub-backend-staging
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8081}:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-staging}
+      - SERVER_PORT=8080
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY}
+      - SPRING_MAIL_HOST=${SPRING_MAIL_HOST}
+      - SPRING_MAIL_PORT=${SPRING_MAIL_PORT}
+      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME}
+      - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD}
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - backend-network
+
+networks:
+  backend-network:
+    driver: bridge
+
