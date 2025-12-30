@@ -6,6 +6,11 @@ WORKDIR /app
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
+# Copy Maven configuration files
+COPY checkstyle.xml .
+COPY spotbugs-exclude.xml .
+COPY sonar-project.properties .
+
 # Copy source code and build
 COPY src ./src
 RUN mvn clean package -DskipTests -B
