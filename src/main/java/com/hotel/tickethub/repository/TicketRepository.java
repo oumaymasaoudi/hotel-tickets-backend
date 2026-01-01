@@ -2,6 +2,8 @@ package com.hotel.tickethub.repository;
 
 import com.hotel.tickethub.model.Ticket;
 import com.hotel.tickethub.model.enums.TicketStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,12 +19,24 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     Optional<Ticket> findByTicketNumber(String ticketNumber);
 
     List<Ticket> findByHotelId(UUID hotelId);
+    
+    // Pagination pour les tickets d'un hôtel
+    Page<Ticket> findByHotelId(UUID hotelId, Pageable pageable);
 
     List<Ticket> findByStatus(TicketStatus status);
+    
+    // Pagination pour les tickets par statut
+    Page<Ticket> findByStatus(TicketStatus status, Pageable pageable);
 
     List<Ticket> findByAssignedTechnicianId(UUID technicianId);
+    
+    // Pagination pour les tickets d'un technicien
+    Page<Ticket> findByAssignedTechnicianId(UUID technicianId, Pageable pageable);
 
     List<Ticket> findByClientEmail(String clientEmail);
+    
+    // Pagination pour les tickets d'un client
+    Page<Ticket> findByClientEmail(String clientEmail, Pageable pageable);
 
     // Pour les rapports
     @Query("SELECT t FROM Ticket t WHERE t.createdAt BETWEEN :startDate AND :endDate")

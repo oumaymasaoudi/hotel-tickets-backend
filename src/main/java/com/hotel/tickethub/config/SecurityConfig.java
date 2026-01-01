@@ -7,9 +7,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import com.hotel.tickethub.filter.RateLimitFilter;
 
 import java.util.Arrays;
 import java.util.List;
@@ -17,6 +19,13 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final RateLimitFilter rateLimitFilter;
+
+    public SecurityConfig(RateLimitFilter rateLimitFilter) {
+        this.rateLimitFilter = rateLimitFilter;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -25,6 +34,9 @@ public class SecurityConfig {
 
                 // ✅ Configuration CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                // ✅ Ajouter le rate limiting filter
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
 
                 // Autoriser toutes les requêtes (pour le moment)
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());

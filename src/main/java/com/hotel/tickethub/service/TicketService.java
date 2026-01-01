@@ -63,6 +63,9 @@ public class TicketService {
         int slaHours = hotel.getPlan().getSlaHours();
         ticket.setSlaDeadline(LocalDateTime.now().plusHours(slaHours));
 
+        // L'assignation sera faite manuellement par l'admin de l'hôtel
+        // Pas d'assignation automatique
+
         ticket = ticketRepository.save(ticket);
 
         // Save images if provided
@@ -155,7 +158,41 @@ public class TicketService {
         return convertToResponse(ticket);
     }
 
+    @Transactional
+    public void deleteTicketImage(UUID ticketId, UUID imageId) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException(TICKET_NOT_FOUND_MESSAGE));
+
+        TicketImage image = ticketImageRepository.findById(imageId)
+                .orElseThrow(() -> new RuntimeException("Image not found"));
+
+        // Verify the image belongs to the ticket
+        if (!image.getTicket().getId().equals(ticketId)) {
+            throw new RuntimeException("Image does not belong to this ticket");
+        }
+
+        // Delete the physical file
+        try {
+            Path filePath = Paths.get(image.getStoragePath());
+            if (Files.exists(filePath)) {
+                Files.delete(filePath);
+            }
+        } catch (IOException e) {
+            // Log but don't fail if file deletion fails
+            System.err.println("Failed to delete image file: " + e.getMessage());
+        }
+
+        // Delete the database record
+        ticketImageRepository.delete(image);
+
+        // Log the deletion
+        logTicketHistory(ticket, "IMAGE_DELETED", image.getFileName(), null, null);
+    }
+
     private void saveTicketImage(Ticket ticket, MultipartFile file) {
+        // Validation du fichier
+        validateImageFile(file);
+
         try {
             Path uploadPath = Paths.get(UPLOAD_DIR);
             if (!Files.exists(uploadPath)) {
@@ -189,6 +226,43 @@ public class TicketService {
 
         } catch (IOException e) {
             throw new RuntimeException("Failed to store image", e);
+        }
+    }
+
+    /**
+     * Valider un fichier image avant l'upload
+     * Vérifie le type MIME, la taille et l'extension
+     */
+    private void validateImageFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new RuntimeException("Le fichier est vide");
+        }
+
+        // Vérifier la taille (max 10MB)
+        long maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.getSize() > maxSize) {
+            throw new RuntimeException("Le fichier est trop volumineux. Taille maximale: 10MB");
+        }
+
+        // Vérifier le type MIME
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new RuntimeException("Le fichier doit être une image");
+        }
+
+        // Vérifier l'extension
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null) {
+            String extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
+            List<String> allowedExtensions = List.of("jpg", "jpeg", "png", "gif", "webp");
+            if (!allowedExtensions.contains(extension)) {
+                throw new RuntimeException("Extension de fichier non autorisée. Extensions autorisées: " + allowedExtensions);
+            }
+        }
+
+        // Vérifier que le nom de fichier n'est pas vide
+        if (originalFilename == null || originalFilename.trim().isEmpty()) {
+            throw new RuntimeException("Le nom de fichier est invalide");
         }
     }
 

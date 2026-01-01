@@ -51,6 +51,15 @@ public class TicketController {
         return ResponseEntity.ok(ticketService.addImagesToTicket(ticketId, images));
     }
 
+    @DeleteMapping("/{ticketId}/images/{imageId}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TECHNICIAN') or hasRole('SUPERADMIN')")
+    public ResponseEntity<Void> deleteTicketImage(
+            @PathVariable UUID ticketId,
+            @PathVariable UUID imageId) {
+        ticketService.deleteTicketImage(ticketId, imageId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/hotel/{hotelId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<List<TicketResponse>> getTicketsByHotel(@PathVariable UUID hotelId) {
