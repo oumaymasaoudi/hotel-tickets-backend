@@ -66,6 +66,9 @@ nano /opt/hotel-ticket-hub-backend-staging/.env
 Collez le contenu suivant (adaptez selon votre configuration) :
 
 ```bash
+# Docker Image (OBLIGATOIRE - remplacez par votre repository GitHub)
+DOCKER_IMAGE=ghcr.io/oumaymasaoudi/hotel-tickets-backend/backend:develop
+
 # Profil Spring Boot
 SPRING_PROFILES_ACTIVE=staging
 
@@ -87,16 +90,18 @@ CORS_ALLOWED_ORIGINS=http://51.21.196.104,http://localhost:5173
 # Frontend URL
 APP_FRONTEND_URL=http://51.21.196.104
 
-# Stripe (optionnel)
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLIC_KEY=pk_test_...
+# Stripe (optionnel - peut être laissé vide)
+STRIPE_SECRET_KEY=
+STRIPE_PUBLIC_KEY=
 
-# Mail (optionnel)
-SPRING_MAIL_HOST=smtp.gmail.com
-SPRING_MAIL_PORT=587
-SPRING_MAIL_USERNAME=your-email@gmail.com
-SPRING_MAIL_PASSWORD=your-app-password
+# Mail (optionnel - peut être laissé vide)
+SPRING_MAIL_HOST=
+SPRING_MAIL_PORT=
+SPRING_MAIL_USERNAME=
+SPRING_MAIL_PASSWORD=
 ```
+
+**⚠️ Important** : Remplacez `oumaymasaoudi/hotel-tickets-backend` par votre propre repository GitHub dans `DOCKER_IMAGE`.
 
 Sauvegardez avec `Ctrl+O`, puis `Enter`, puis `Ctrl+X`.
 
