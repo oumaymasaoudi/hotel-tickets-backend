@@ -53,22 +53,23 @@ public class AuthService {
             user.setSpecialties(request.getSpecialties());
         }
 
-        // Business rule: Admin and Technician must be linked to a hotel
-        if (request.getRole() != null &&
-                (request.getRole().toUpperCase().equals("ADMIN")
-                        || request.getRole().toUpperCase().equals("TECHNICIAN"))) {
+        // Business rule: Admin must be linked to a hotel
+        // Technicians work for all hotels, so they don't need a hotelId
+        if (request.getRole() != null && request.getRole().toUpperCase().equals("ADMIN")) {
             if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
-                throw new RuntimeException("A " + request.getRole() + " must be linked to a hotel");
+                throw new RuntimeException("An ADMIN must be linked to a hotel");
             }
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
                     .orElseThrow(() -> new RuntimeException("Hotel not found"));
             user.setHotel(hotel);
         } else if (request.getHotelId() != null && !request.getHotelId().isEmpty()) {
-            // For other roles (CLIENT), hotel is optional
+            // For other roles (CLIENT, TECHNICIAN), hotel is optional
+            // Technicians work for all hotels, so hotelId is not required
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
                     .orElseThrow(() -> new RuntimeException("Hotel not found"));
             user.setHotel(hotel);
         }
+        // Technicians without hotelId: user.setHotel(null) - they work for all hotels
 
         user = userRepository.save(user);
 

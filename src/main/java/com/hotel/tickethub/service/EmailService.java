@@ -4,29 +4,46 @@ import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.Payment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service pour l'envoi d'emails automatiques
  * Règle 4 & 14: Rappels paiement et rapports automatiques
  * 
- * NOTE: En développement, les emails sont loggés. 
- * En production, configurer un service d'email (SMTP, SendGrid, etc.)
+ * Utilise Spring Mail pour l'envoi d'emails.
+ * En développement, si la configuration email n'est pas disponible, les emails sont loggés.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
 
+    private final Optional<JavaMailSender> mailSender;
+
+    @Value("${spring.mail.username:}")
+    private String fromEmail;
+
+    @Value("${app.email.enabled:true}")
+    private boolean emailEnabled;
+
     /**
      * Envoyer un rappel de paiement avant l'échéance
      * Règle 4: Rapport automatique avant échéance
      */
     public void sendPaymentReminder(Hotel hotel, Payment payment) {
+        if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
+            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            return;
+        }
+
         String subject = "Rappel de paiement - " + hotel.getName();
         String body = String.format(
             "Bonjour,\n\n" +
@@ -44,12 +61,7 @@ public class EmailService {
             payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
         );
 
-        log.info("📧 EMAIL - Rappel paiement envoyé à: {}", hotel.getEmail());
-        log.info("📧 Subject: {}", subject);
-        log.info("📧 Body: {}", body);
-
-        // TODO: En production, utiliser un service d'email réel
-        // emailSender.send(hotel.getEmail(), subject, body);
+        sendEmail(hotel.getEmail(), subject, body);
     }
 
     /**
@@ -57,6 +69,11 @@ public class EmailService {
      * Règle 14: Rapports automatiques
      */
     public void sendReport(Hotel hotel, Map<String, Object> report, String reportType) {
+        if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
+            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            return;
+        }
+
         String subject = String.format("Rapport %s - %s", reportType, hotel.getName());
         
         StringBuilder body = new StringBuilder();
@@ -81,18 +98,18 @@ public class EmailService {
         body.append("\nCordialement,\n");
         body.append("L'équipe Hotel Ticket Hub");
 
-        log.info("📧 EMAIL - Rapport {} envoyé à: {}", reportType, hotel.getEmail());
-        log.info("📧 Subject: {}", subject);
-        log.info("📧 Body: {}", body.toString());
-
-        // TODO: En production, utiliser un service d'email réel
-        // emailSender.send(hotel.getEmail(), subject, body.toString());
+        sendEmail(hotel.getEmail(), subject, body.toString());
     }
 
     /**
      * Envoyer une notification de paiement en retard
      */
     public void sendOverdueNotification(Hotel hotel, Payment payment) {
+        if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
+            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            return;
+        }
+
         String subject = "⚠️ Paiement en retard - " + hotel.getName();
         String body = String.format(
             "Bonjour,\n\n" +
@@ -111,12 +128,41 @@ public class EmailService {
             payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
         );
 
-        log.warn("📧 EMAIL - Notification retard envoyée à: {}", hotel.getEmail());
-        log.warn("📧 Subject: {}", subject);
-        log.warn("📧 Body: {}", body);
+        sendEmail(hotel.getEmail(), subject, body);
+    }
 
-        // TODO: En production, utiliser un service d'email réel
-        // emailSender.send(hotel.getEmail(), subject, body);
+    /**
+     * Méthode privée pour envoyer un email
+     * Utilise JavaMailSender si disponible, sinon log l'email
+     */
+    private void sendEmail(String to, String subject, String body) {
+        if (!emailEnabled) {
+            log.info("📧 EMAIL (désactivé) - Destinataire: {}, Subject: {}", to, subject);
+            return;
+        }
+
+        if (mailSender.isPresent() && fromEmail != null && !fromEmail.isEmpty()) {
+            try {
+                SimpleMailMessage message = new SimpleMailMessage();
+                message.setFrom(fromEmail);
+                message.setTo(to);
+                message.setSubject(subject);
+                message.setText(body);
+                
+                mailSender.get().send(message);
+                log.info("✅ EMAIL envoyé avec succès à: {}", to);
+            } catch (Exception e) {
+                log.error("❌ Erreur lors de l'envoi de l'email à {}: {}", to, e.getMessage(), e);
+                // Fallback: log l'email même en cas d'erreur
+                log.info("📧 EMAIL (fallback) - Destinataire: {}, Subject: {}", to, subject);
+                log.info("📧 Body: {}", body);
+            }
+        } else {
+            // Fallback: log l'email si la configuration n'est pas disponible
+            log.info("📧 EMAIL (mode développement) - Destinataire: {}, Subject: {}", to, subject);
+            log.info("📧 Body: {}", body);
+            log.info("💡 Pour activer l'envoi d'emails, configurez spring.mail.* dans application.properties");
+        }
     }
 }
 
