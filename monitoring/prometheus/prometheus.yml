@@ -1,0 +1,59 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'hotel-ticket-hub-staging'
+    environment: 'staging'
+
+# Configuration Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Règles d'alerte
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Configuration des cibles à scraper
+scrape_configs:
+  # Prometheus lui-même
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter (métriques système de la VM)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          instance: 'backend-vm'
+          job: 'node-exporter'
+
+  # cAdvisor (métriques des conteneurs Docker)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          instance: 'backend-vm'
+          job: 'cadvisor'
+
+  # Backend Spring Boot (via Actuator)
+  - job_name: 'backend'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          application: 'hotel-ticket-hub-backend'
+          environment: 'staging'
+    scrape_interval: 10s
+
+  # Frontend (si métriques disponibles)
+  - job_name: 'frontend'
+    static_configs:
+      - targets: ['host.docker.internal:80']
+        labels:
+          application: 'hotel-ticket-hub-frontend'
+          environment: 'staging'
+

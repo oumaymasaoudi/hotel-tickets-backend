@@ -1,0 +1,53 @@
+# ============================================
+# GRAFANA LOKI - Alternative légère à ELK Stack
+# Utilise ~100MB au lieu de 1.6GB
+# ============================================
+
+services:
+  # ============================================
+  # LOKI - Stockage des logs
+  # ============================================
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki:/etc/loki
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - monitoring-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # PROMTAIL - Collecte des logs
+  # ============================================
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail:/etc/promtail
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/var/log/app:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    networks:
+      - monitoring-network
+    depends_on:
+      - loki
+
+volumes:
+  loki-data:
+
+networks:
+  monitoring-network:
+    external: true
+    name: monitoring-network
+

@@ -1,0 +1,107 @@
+# ============================================
+# ELK STACK - Centralisation des logs
+# À utiliser sur la VM de staging/production
+# ============================================
+
+services:
+  # ============================================
+  # ELASTICSEARCH - Stockage des logs
+  # ============================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - elk-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # LOGSTASH - Traitement des logs
+  # ============================================
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: logstash
+    restart: unless-stopped
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./logstash/config:/usr/share/logstash/config
+    environment:
+      - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
+    networks:
+      - elk-network
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # KIBANA - Visualisation des logs
+  # ============================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
+    volumes:
+      - kibana-data:/usr/share/kibana/data
+    networks:
+      - elk-network
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # FILEBEAT - Collecte des logs depuis les fichiers
+  # ============================================
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: filebeat
+    restart: unless-stopped
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/var/log/app:ro
+    networks:
+      - elk-network
+    depends_on:
+      - elasticsearch
+      - logstash
+
+volumes:
+  elasticsearch-data:
+  kibana-data:
+
+networks:
+  elk-network:
+    driver: bridge
+

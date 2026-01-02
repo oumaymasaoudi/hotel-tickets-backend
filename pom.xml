@@ -108,6 +108,25 @@
             <version>2.3.0</version>
         </dependency>
         
+        <!-- Spring Boot Actuator (métriques et monitoring) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        
+        <!-- Micrometer Prometheus (exposition des métriques) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        
+        <!-- Logstash Logback Encoder (logs JSON) -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+        
         <!-- Stripe Java SDK -->
         <dependency>
             <groupId>com.stripe</groupId>
