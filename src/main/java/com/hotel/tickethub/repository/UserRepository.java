@@ -22,4 +22,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     // Alternative : récupérer directement les utilisateurs d'un hôtel
     List<User> findByHotelId(UUID hotelId);
+    
+    // Récupérer les utilisateurs sans hôtel (hotel_id = NULL)
+    // Utilisé pour les techniciens qui travaillent pour tous les hôtels
+    List<User> findByHotelIdIsNull();
 }

@@ -51,21 +51,29 @@ public class UserRestController {
      * GET /api/users/hotel/{hotelId}/technicians - Get technicians for a hotel
      * (Admin only)
      * 
-     * Business rule: Technicians are linked to a hotel via their hotelId in the
-     * users table.
-     * This method returns only technicians for the specified hotel.
+     * Business rule: Technicians can work for all hotels (hotel_id = NULL) or for a specific hotel.
+     * This method returns:
+     * 1. Technicians linked to the specified hotel (hotel_id = hotelId)
+     * 2. Technicians with hotel_id = NULL (they work for all hotels)
      */
     @GetMapping("/hotel/{hotelId}/technicians")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<List<UserResponse>> getTechniciansByHotel(@PathVariable UUID hotelId) {
         try {
-            // Get users for the hotel
+            // Get users for the hotel (hotel_id = hotelId)
             List<User> usersInHotel = userRepository.findByHotelId(hotelId);
+            
+            // Get technicians with hotel_id = NULL (they work for all hotels)
+            List<User> techniciansForAllHotels = userRepository.findByHotelIdIsNull();
+
+            // Combine both lists
+            List<User> allUsers = new java.util.ArrayList<>(usersInHotel);
+            allUsers.addAll(techniciansForAllHotels);
 
             // Filter to keep only active technicians
             List<UserResponse> technicians = new java.util.ArrayList<>();
 
-            for (User user : usersInHotel) {
+            for (User user : allUsers) {
                 if (user == null || (user.getIsActive() != null && !user.getIsActive())) {
                     continue; // Skip null or inactive users
                 }
