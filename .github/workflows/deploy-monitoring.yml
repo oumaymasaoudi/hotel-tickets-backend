@@ -1,0 +1,148 @@
+name: Deploy Monitoring Stack
+
+on:
+  workflow_dispatch:  # Déclenchement manuel
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'monitoring/**'
+      - '.github/workflows/deploy-monitoring.yml'
+
+env:
+  MONITORING_DIR: /opt/monitoring
+
+jobs:
+  deploy-monitoring:
+    name: Deploy Monitoring to Ansible VM
+    runs-on: ubuntu-latest
+    environment: monitoring
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-monitoring
+      cancel-in-progress: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify monitoring files exist
+        run: |
+          if [ ! -d "monitoring" ]; then
+            echo "ERROR: monitoring directory not found!"
+            exit 1
+          fi
+          echo "✅ Monitoring directory found"
+          echo "📁 Files to deploy:"
+          find monitoring -type f -name "*.yml" -o -name "*.yaml" -o -name "*.conf" | head -20
+
+      - name: Setup SSH Config
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.MONITORING_SSH_PRIVATE_KEY }}" > ~/.ssh/monitoring_key
+          chmod 600 ~/.ssh/monitoring_key
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host monitoring-vm
+            HostName ${{ secrets.MONITORING_HOST }}
+            User ${{ secrets.MONITORING_USER }}
+            IdentityFile ~/.ssh/monitoring_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Copy monitoring files to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          source: "monitoring/"
+          target: "${{ env.MONITORING_DIR }}/"
+          strip_components: 1  # Enlever le préfixe "monitoring/"
+          timeout: 60s
+          command_timeout: 30s
+          debug: false
+          use_insecure_cipher: false
+          cipher: ["aes128-ctr", "aes192-ctr", "aes256-ctr"]
+          # Exclure les fichiers inutiles
+          rm: false
+
+      - name: Deploy Monitoring Stack
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          timeout: 300s
+          command_timeout: 120s
+          debug: false
+          use_insecure_cipher: false
+          cipher: ["aes128-ctr", "aes192-ctr", "aes256-ctr"]
+          script: |
+            set -euo pipefail
+            cd ${{ env.MONITORING_DIR }}
+            
+            echo "🔍 Vérification des fichiers..."
+            if [ ! -f "docker-compose.monitoring.yml" ]; then
+              echo "ERROR: docker-compose.monitoring.yml not found!"
+              exit 1
+            fi
+            
+            # Utiliser prometheus-remote.yml si disponible (pour VM séparée)
+            if [ -f "prometheus/prometheus-remote.yml" ]; then
+              echo "✅ Utilisation de prometheus-remote.yml (VM séparée)"
+              cp prometheus/prometheus-remote.yml prometheus/prometheus.yml
+            fi
+            
+            echo "🛑 Arrêt des services existants..."
+            docker compose -f docker-compose.monitoring.yml down 2>/dev/null || true
+            
+            echo "📥 Pull des images Docker..."
+            docker compose -f docker-compose.monitoring.yml pull
+            
+            echo "🚀 Démarrage de la stack de monitoring..."
+            docker compose -f docker-compose.monitoring.yml up -d
+            
+            echo "⏳ Attente du démarrage (15s)..."
+            sleep 15
+            
+            echo "📋 Statut des conteneurs:"
+            docker compose -f docker-compose.monitoring.yml ps
+            
+            echo "✅ Vérification des services..."
+            # Vérifier Prometheus
+            if docker ps | grep -q prometheus; then
+              echo "✅ Prometheus est en cours d'exécution"
+            else
+              echo "❌ Prometheus n'est pas démarré"
+              docker compose -f docker-compose.monitoring.yml logs prometheus | tail -20
+              exit 1
+            fi
+            
+            # Vérifier Grafana
+            if docker ps | grep -q grafana; then
+              echo "✅ Grafana est en cours d'exécution"
+            else
+              echo "❌ Grafana n'est pas démarré"
+              docker compose -f docker-compose.monitoring.yml logs grafana | tail -20
+              exit 1
+            fi
+            
+            echo "📋 Logs récents (dernières 10 lignes):"
+            docker compose -f docker-compose.monitoring.yml logs --tail=10
+            
+            echo "✅ Monitoring stack déployé avec succès!"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/monitoring_key ~/.ssh/config ~/.ssh/known_hosts
+

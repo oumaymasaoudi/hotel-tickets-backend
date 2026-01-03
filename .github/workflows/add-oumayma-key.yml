@@ -17,13 +17,27 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 13.49.44.219 >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/backend_key
+          chmod 600 ~/.ssh/backend_key
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host backend-staging
+            HostName ${{ secrets.STAGING_HOST }}
+            User ${{ secrets.STAGING_USER }}
+            IdentityFile ~/.ssh/backend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
       
       - name: Add Oumayma Public Key
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.49.44.219 << EOF
+          ssh -F ~/.ssh/config backend-staging << EOF
             echo "=== Ajout de la clé publique ==="
             echo "${{ github.event.inputs.public_key }}" >> ~/.ssh/authorized_keys
             chmod 600 ~/.ssh/authorized_keys
@@ -37,5 +51,5 @@ jobs:
       - name: Cleanup SSH
         if: always()
         run: |
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/backend_key ~/.ssh/config ~/.ssh/known_hosts
 

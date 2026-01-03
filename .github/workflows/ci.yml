@@ -361,7 +361,7 @@ jobs:
     needs: [docker-build]
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment: staging
-    timeout-minutes: 10
+    timeout-minutes: 15  # Augmenté pour gérer les connexions SSH lentes
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
@@ -400,6 +400,19 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
+      - name: Test SSH Connection
+        run: |
+          echo "🔍 Test de connexion SSH..."
+          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no backend-staging "echo 'SSH connection successful'" || {
+            echo "❌ Échec de la connexion SSH"
+            echo "Vérifiez que :"
+            echo "  - La VM est accessible depuis GitHub Actions"
+            echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
+            echo "  - Les secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY sont corrects"
+            exit 1
+          }
+          echo "✅ Connexion SSH OK"
+
       - name: Copy docker-compose to staging
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -409,11 +422,10 @@ jobs:
           source: "docker-compose.yml"
           target: "/opt/hotel-ticket-hub-backend-staging/"
           strip_components: 0
-          timeout: 30s  # Réduit car on n'envoie qu'un seul fichier
-          command_timeout: 15s
-          debug: false  # Désactivé en production pour moins de logs
+          timeout: 120s  # Augmenté pour gérer les connexions lentes
+          command_timeout: 60s
+          debug: true  # Activé pour diagnostiquer les problèmes
           use_insecure_cipher: false
-          cipher: ["aes128-ctr", "aes192-ctr", "aes256-ctr"]
 
       - name: Deploy to staging VM
         uses: appleboy/ssh-action@v1.0.3
@@ -425,7 +437,6 @@ jobs:
           command_timeout: 120s
           debug: false
           use_insecure_cipher: false
-          cipher: ["aes128-ctr", "aes192-ctr", "aes256-ctr"]
           script: |
             set -euo pipefail  # Mode strict : erreur si variable non définie
             cd /opt/hotel-ticket-hub-backend-staging

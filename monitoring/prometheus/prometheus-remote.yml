@@ -50,7 +50,7 @@ scrape_configs:
   - job_name: 'backend'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['13.49.44.219:8081']  # IP de la VM Backend
+      - targets: ['13.63.15.86:8081']  # Elastic IP de la VM Backend (IP fixe)
         labels:
           application: 'hotel-ticket-hub-backend'
           environment: 'staging'
