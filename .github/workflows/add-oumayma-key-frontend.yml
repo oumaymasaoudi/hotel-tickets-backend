@@ -1,0 +1,56 @@
+name: Add Oumayma Key to Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_key:
+        description: 'Clé publique SSH (oumayma-key.pem.pub) - Commence par ssh-rsa ou ssh-ed25519'
+        required: true
+        type: string
+
+jobs:
+  add-key:
+    name: Ajouter la clé Oumayma sur la VM Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          # Utiliser la clé SSH de staging (ou créer un secret FRONTEND_SSH_PRIVATE_KEY)
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          chmod 600 ~/.ssh/frontend_key
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H 51.21.196.104 >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host frontend-staging
+            HostName 51.21.196.104
+            User ubuntu
+            IdentityFile ~/.ssh/frontend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+      
+      - name: Add Oumayma Public Key
+        run: |
+          ssh -F ~/.ssh/config frontend-staging << EOF
+            echo "=== Ajout de la clé publique ==="
+            echo "${{ github.event.inputs.public_key }}" >> ~/.ssh/authorized_keys
+            chmod 600 ~/.ssh/authorized_keys
+            echo "✅ Clé ajoutée avec succès"
+            echo ""
+            echo "=== Clés autorisées ==="
+            tail -3 ~/.ssh/authorized_keys
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/frontend_key ~/.ssh/config ~/.ssh/known_hosts
+
