@@ -1,0 +1,41 @@
+name: Add Oumayma Key to Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_key:
+        description: 'Clé publique SSH (oumayma-key.pem.pub) - Commence par ssh-rsa ou ssh-ed25519'
+        required: true
+        type: string
+
+jobs:
+  add-key:
+    name: Ajouter la clé Oumayma sur la VM Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 13.49.44.219 >> ~/.ssh/known_hosts 2>/dev/null || true
+      
+      - name: Add Oumayma Public Key
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.49.44.219 << EOF
+            echo "=== Ajout de la clé publique ==="
+            echo "${{ github.event.inputs.public_key }}" >> ~/.ssh/authorized_keys
+            chmod 600 ~/.ssh/authorized_keys
+            echo "✅ Clé ajoutée avec succès"
+            echo ""
+            echo "=== Clés autorisées ==="
+            tail -3 ~/.ssh/authorized_keys
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+
