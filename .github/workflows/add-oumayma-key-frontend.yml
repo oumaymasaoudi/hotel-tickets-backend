@@ -17,16 +17,20 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          # Utiliser la clé SSH de staging (ou créer un secret FRONTEND_SSH_PRIVATE_KEY)
-          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          # Utiliser FRONTEND_SSH_PRIVATE_KEY si disponible, sinon STAGING_SSH_PRIVATE_KEY
+          if [ -n "${{ secrets.FRONTEND_SSH_PRIVATE_KEY }}" ]; then
+            echo "${{ secrets.FRONTEND_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          else
+            echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          fi
           chmod 600 ~/.ssh/frontend_key
-          # Ajouter l'host à known_hosts (VM Backend)
-          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H 51.21.196.104 >> ~/.ssh/known_hosts 2>/dev/null || true
           # Configuration SSH optimisée
           cat >> ~/.ssh/config << EOF
-          Host backend-staging
-            HostName ${{ secrets.STAGING_HOST }}
-            User ${{ secrets.STAGING_USER }}
+          Host frontend-staging
+            HostName 51.21.196.104
+            User ubuntu
             IdentityFile ~/.ssh/frontend_key
             StrictHostKeyChecking no
             UserKnownHostsFile ~/.ssh/known_hosts
@@ -36,30 +40,17 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
       
-      - name: Add Oumayma Public Key via Backend VM
+      - name: Add Oumayma Public Key
         run: |
-          # Se connecter à la VM Backend, puis de là à la VM Frontend
-          ssh -F ~/.ssh/config backend-staging bash << 'BACKEND_SCRIPT'
-            echo "=== Connexion via VM Backend ==="
-            # Tester d'abord si on peut se connecter à la VM Frontend depuis la VM Backend
-            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 ubuntu@51.21.196.104 "echo 'Connexion OK'" || {
-              echo "❌ Impossible de se connecter à la VM Frontend depuis la VM Backend"
-              echo "Vérifiez que la VM Backend peut accéder à la VM Frontend"
-              exit 1
-            }
-            
-            # Ajouter la clé publique sur la VM Frontend
-            PUBLIC_KEY='${{ github.event.inputs.public_key }}'
-            ssh -o StrictHostKeyChecking=no ubuntu@51.21.196.104 bash << FRONTEND_SCRIPT
-              echo "=== Ajout de la clé publique sur VM Frontend ==="
-              echo "\${PUBLIC_KEY}" >> ~/.ssh/authorized_keys
-              chmod 600 ~/.ssh/authorized_keys
-              echo "✅ Clé ajoutée avec succès"
-              echo ""
-              echo "=== Clés autorisées ==="
-              tail -3 ~/.ssh/authorized_keys
-            FRONTEND_SCRIPT
-          BACKEND_SCRIPT
+          ssh -F ~/.ssh/config frontend-staging << EOF
+            echo "=== Ajout de la clé publique ==="
+            echo "${{ github.event.inputs.public_key }}" >> ~/.ssh/authorized_keys
+            chmod 600 ~/.ssh/authorized_keys
+            echo "✅ Clé ajoutée avec succès"
+            echo ""
+            echo "=== Clés autorisées ==="
+            tail -3 ~/.ssh/authorized_keys
+          EOF
         continue-on-error: true
       
       - name: Cleanup SSH
