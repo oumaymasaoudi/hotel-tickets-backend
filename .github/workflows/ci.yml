@@ -576,7 +576,6 @@ jobs:
           command_timeout: 60s
           debug: false
           use_insecure_cipher: false
-          ciphers: aes128-ctr,aes192-ctr,aes256-ctr
 
       - name: Deploy Monitoring Stack
         uses: appleboy/ssh-action@v1.0.3
@@ -588,7 +587,6 @@ jobs:
           command_timeout: 120s
           debug: false
           use_insecure_cipher: false
-          ciphers: aes128-ctr,aes192-ctr,aes256-ctr
           script: |
             set -euo pipefail
             cd ${{ env.MONITORING_DIR }}
@@ -607,6 +605,13 @@ jobs:
             
             echo "🛑 Arrêt des services existants..."
             docker compose -f docker-compose.monitoring.yml down 2>/dev/null || true
+            
+            # Supprimer le réseau existant s'il a un mauvais label
+            if docker network ls | grep -q monitoring-network; then
+              echo "🔧 Suppression du réseau monitoring-network existant..."
+              docker network rm monitoring-network 2>/dev/null || true
+              sleep 2
+            fi
             
             echo "📥 Pull des images Docker..."
             docker compose -f docker-compose.monitoring.yml pull
