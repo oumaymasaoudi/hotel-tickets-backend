@@ -23,6 +23,9 @@
 | `STAGING_USER` | Utilisateur SSH | `ubuntu` |
 | `STAGING_SSH_PRIVATE_KEY` | Clé privée SSH pour la VM Backend | `-----BEGIN RSA PRIVATE KEY-----...` |
 | `GHCR_TOKEN` | Token GitHub Container Registry | `ghp_...` |
+| `MONITORING_HOST` | IP de la VM Monitoring/Ansible | `13.62.53.224` |
+| `MONITORING_USER` | Utilisateur SSH pour la VM Monitoring | `ubuntu` |
+| `MONITORING_SSH_PRIVATE_KEY` | Clé privée SSH pour la VM Monitoring | `-----BEGIN RSA PRIVATE KEY-----...` |
 
 ### Pour le déploiement Monitoring (`deploy-monitoring.yml`)
 
@@ -47,6 +50,7 @@
 - `build` : Build Maven et création du JAR
 - `docker-build` : Build et push de l'image Docker (branche `develop`)
 - `deploy-staging` : Déploiement sur la VM Backend (branche `develop`)
+- `deploy-monitoring` : Déploiement de la stack Monitoring sur la VM Monitoring (branche `develop`, après `deploy-staging`)
 - `sonar` : Analyse SonarQube
 - `release` : Release automatique (branche `main`)
 

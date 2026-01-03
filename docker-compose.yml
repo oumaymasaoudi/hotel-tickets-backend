@@ -37,6 +37,7 @@ services:
       - JAVA_OPTS=-Xmx1024m -Xms512m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
     volumes:
       - ./uploads:/app/uploads
+      - ./logs:/app/logs
     networks:
       - backend-network
 
