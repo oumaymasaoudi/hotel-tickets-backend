@@ -120,18 +120,6 @@
             <version>2.3.0</version>
         </dependency>
         
-        <!-- Spring Boot Actuator (métriques et monitoring) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        
-        <!-- Micrometer Prometheus (exposition des métriques) -->
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-prometheus</artifactId>
-        </dependency>
-        
         <!-- Logstash Logback Encoder (logs JSON) -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
