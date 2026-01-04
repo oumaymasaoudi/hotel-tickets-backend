@@ -604,20 +604,77 @@ jobs:
             fi
             
             echo "🛑 Arrêt des services existants..."
-            docker compose -f docker-compose.monitoring.yml down 2>/dev/null || true
+            docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
             
-            # Supprimer le réseau existant s'il a un mauvais label
-            if docker network ls | grep -q monitoring-network; then
-              echo "🔧 Suppression du réseau monitoring-network existant..."
-              docker network rm monitoring-network 2>/dev/null || true
-              sleep 2
-            fi
+            # Nettoyer complètement : arrêter tous les conteneurs monitoring
+            echo "🔧 Nettoyage des conteneurs monitoring..."
+            for container in prometheus grafana alertmanager node-exporter cadvisor; do
+              docker ps -a --filter "name=$container" --format "{{.ID}}" | while read id; do
+                [ -n "$id" ] && docker rm -f "$id" 2>/dev/null || true
+              done
+            done
+            
+            # Supprimer le réseau existant (forcer si nécessaire)
+            echo "🔧 Suppression du réseau monitoring-network..."
+            # Essayer plusieurs fois avec différentes méthodes
+            for i in 1 2 3; do
+              if docker network ls | grep -q monitoring-network; then
+                echo "  Tentative $i: Suppression du réseau..."
+                docker network rm monitoring-network 2>/dev/null && break || {
+                  if [ $i -eq 1 ]; then
+                    echo "  ⚠️  Le réseau est encore utilisé, nettoyage des réseaux non utilisés..."
+                    docker network prune -f
+                    sleep 2
+                  elif [ $i -eq 2 ]; then
+                    echo "  ⚠️  Réessai après nettoyage..."
+                    sleep 2
+                  else
+                    echo "  ⚠️  Impossible de supprimer le réseau, on continue quand même..."
+                  fi
+                }
+              else
+                echo "  ✅ Le réseau n'existe plus"
+                break
+              fi
+            done
+            sleep 2
             
             echo "📥 Pull des images Docker..."
             docker compose -f docker-compose.monitoring.yml pull
             
             echo "🚀 Démarrage de la stack de monitoring..."
-            docker compose -f docker-compose.monitoring.yml up -d
+            # Démarrer avec gestion d'erreur pour le réseau
+            set +e  # Ne pas arrêter sur les erreurs
+            docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+            COMPOSE_EXIT_CODE=$?
+            set -e  # Réactiver l'arrêt sur erreur
+            
+            if [ $COMPOSE_EXIT_CODE -ne 0 ]; then
+              echo "⚠️  Erreur détectée, vérification du réseau..."
+              # Si l'erreur est liée au réseau, supprimer le réseau et réessayer
+              if docker network ls | grep -q monitoring-network; then
+                echo "🔧 Suppression forcée du réseau problématique..."
+                # Arrêter tous les conteneurs qui utilisent ce réseau
+                CONTAINER_IDS=$(docker ps --filter network=monitoring-network -q 2>/dev/null || true)
+                if [ -n "$CONTAINER_IDS" ]; then
+                  echo "$CONTAINER_IDS" | xargs docker stop 2>/dev/null || true
+                  echo "$CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
+                fi
+                OLD_CONTAINER_IDS=$(docker ps -a --filter network=monitoring-network -q 2>/dev/null || true)
+                if [ -n "$OLD_CONTAINER_IDS" ]; then
+                  echo "$OLD_CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
+                fi
+                # Supprimer le réseau
+                docker network rm monitoring-network 2>/dev/null || docker network prune -f
+                sleep 3
+                echo "🔄 Nouvelle tentative de démarrage..."
+                docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+              else
+                echo "❌ Erreur non liée au réseau, voir les logs"
+                docker compose -f docker-compose.monitoring.yml logs
+                exit 1
+              fi
+            fi
             
             echo "⏳ Attente du démarrage (15s)..."
             sleep 15
