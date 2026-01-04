@@ -453,9 +453,16 @@ jobs:
               docker stop $CONTAINERS 2>/dev/null || true
             fi
             
-            OLD_CONTAINERS=$(docker ps -aq --filter "name=hotel-ticket-hub-backend-staging" 2>/dev/null || true)
+            # Stop any container using port 9100 (Node Exporter)
+            CONTAINERS_9100=$(docker ps -q --filter "publish=9100" 2>/dev/null || true)
+            if [ -n "$CONTAINERS_9100" ]; then
+              docker stop $CONTAINERS_9100 2>/dev/null || true
+              docker rm $CONTAINERS_9100 2>/dev/null || true
+            fi
+            
+            OLD_CONTAINERS=$(docker ps -aq --filter "name=hotel-ticket-hub-backend-staging" --filter "name=node-exporter-backend" 2>/dev/null || true)
             if [ -n "$OLD_CONTAINERS" ]; then
-              docker rm $OLD_CONTAINERS 2>/dev/null || true
+              docker rm -f $OLD_CONTAINERS 2>/dev/null || true
             fi
             
             # Stop and remove old docker-compose containers
