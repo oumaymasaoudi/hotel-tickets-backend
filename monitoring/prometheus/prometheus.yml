@@ -58,6 +58,15 @@ scrape_configs:
     scrape_interval: 10s
     scrape_timeout: 5s
 
+  # Node Exporter (métriques système de la VM Backend)
+  - job_name: 'node-exporter-backend'
+    static_configs:
+      - targets: ['13.63.15.86:9100']  # Elastic IP de la VM Backend + Node Exporter
+        labels:
+          instance: 'backend-vm'
+          job: 'node-exporter'
+          environment: 'staging'
+
   # Frontend (désactivé - React n'expose pas de métriques Prometheus)
   # - job_name: 'frontend'
   #   static_configs:
