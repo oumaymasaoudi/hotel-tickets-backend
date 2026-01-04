@@ -63,10 +63,10 @@ Une fois l'Elastic IP associée :
 
 ### 1. Configuration Prometheus
 
-Si vous utilisez `prometheus-remote.yml` :
+Configuration Prometheus :
 
 ```yaml
-# Fichier : monitoring/prometheus/prometheus-remote.yml
+# Fichier : monitoring/prometheus/prometheus.yml
 - job_name: 'backend'
   metrics_path: '/actuator/prometheus'
   static_configs:

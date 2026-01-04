@@ -61,7 +61,7 @@ curl http://13.49.44.219:8081/actuator/prometheus | head -50
 ssh -i C:\Users\oumay\.ssh\oumayma-key.pem ubuntu@13.62.53.224
 
 # Vérifier la configuration
-cat /opt/monitoring/prometheus/prometheus-remote.yml | grep -A 10 "job_name: 'backend'"
+cat /opt/monitoring/prometheus/prometheus.yml | grep -A 10 "job_name: 'backend'"
 ```
 
 **La configuration devrait être :**
@@ -77,7 +77,7 @@ cat /opt/monitoring/prometheus/prometheus-remote.yml | grep -A 10 "job_name: 'ba
 **Corriger le fichier :**
 ```powershell
 # Éditer le fichier
-nano /opt/monitoring/prometheus/prometheus-remote.yml
+nano /opt/monitoring/prometheus/prometheus.yml
 
 # Modifier la section backend pour pointer vers la bonne IP
 # Sauvegarder (Ctrl+O, Enter, Ctrl+X)

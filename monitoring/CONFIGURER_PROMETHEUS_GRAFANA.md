@@ -73,7 +73,7 @@
 
 **Si un target est DOWN (rouge) :**
 - Cliquez sur le target pour voir l'erreur
-- Vérifiez la configuration dans `prometheus-remote.yml`
+- Vérifiez la configuration dans `prometheus.yml`
 
 ### 3.2 Tester une query dans Grafana
 
@@ -191,7 +191,7 @@ Dans **Explore** :
    ```
 
 2. Vérifiez la configuration Prometheus :
-   - Le fichier `prometheus-remote.yml` doit pointer vers `13.49.44.219:8081`
+   - Le fichier `prometheus.yml` doit pointer vers `13.63.15.86:8081`
 
 3. Vérifiez dans Prometheus UI :
    - Allez sur `http://13.62.53.224:9090`

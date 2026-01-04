@@ -15,7 +15,7 @@
 
 ### 2. Mettre à Jour la Configuration Prometheus
 
-Le fichier `prometheus-remote.yml` a déjà été mis à jour avec la nouvelle IP.
+Le fichier `prometheus.yml` a déjà été mis à jour avec la nouvelle IP.
 
 **Sur la VM Ansible/Monitoring :**
 
@@ -24,11 +24,11 @@ Le fichier `prometheus-remote.yml` a déjà été mis à jour avec la nouvelle I
 ssh -i C:\Users\oumay\.ssh\oumayma-key.pem ubuntu@13.62.53.224
 
 # Vérifier la configuration
-cat /opt/monitoring/prometheus/prometheus-remote.yml | grep "13.51.56.138"
+cat /opt/monitoring/prometheus/prometheus.yml | grep "13.63.15.86"
 
 # Si l'IP n'est pas à jour, éditer le fichier
-nano /opt/monitoring/prometheus/prometheus-remote.yml
-# Changer 13.49.44.219 par 13.51.56.138
+nano /opt/monitoring/prometheus/prometheus.yml
+# Vérifier que l'IP est 13.63.15.86:8081
 
 # Redémarrer Prometheus
 docker restart prometheus
@@ -77,7 +77,7 @@ curl http://13.51.56.138:8081/actuator/prometheus | head -20
 
 ## 📝 Fichiers à Mettre à Jour
 
-- [x] `monitoring/prometheus/prometheus-remote.yml` ✅ (déjà fait)
+- [x] `monitoring/prometheus/prometheus.yml` ✅ (déjà fait)
 - [ ] Secret GitHub `STAGING_HOST` ⚠️ (à faire)
 - [ ] Configuration Prometheus sur la VM ⚠️ (à faire)
 - [ ] Security Group AWS (si nécessaire) ⚠️ (à vérifier)

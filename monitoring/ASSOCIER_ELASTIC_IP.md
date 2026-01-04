@@ -46,7 +46,7 @@ Une fois l'Elastic IP associée, mettez à jour :
 ### 2. Configuration Prometheus
 
 **Fichier local** (déjà mis à jour) :
-- `monitoring/prometheus/prometheus-remote.yml` ✅
+- `monitoring/prometheus/prometheus.yml` ✅
 
 **Sur la VM Monitoring** :
 
@@ -55,7 +55,7 @@ Une fois l'Elastic IP associée, mettez à jour :
 ssh -i C:\Users\oumay\.ssh\oumayma-key.pem ubuntu@13.62.53.224
 
 # Éditer la configuration
-nano /opt/monitoring/prometheus/prometheus-remote.yml
+nano /opt/monitoring/prometheus/prometheus.yml
 
 # Changer la ligne :
 # - targets: ['13.51.56.138:8081']

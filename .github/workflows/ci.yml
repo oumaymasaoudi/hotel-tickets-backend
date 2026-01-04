@@ -596,12 +596,11 @@ jobs:
               echo "ERROR: docker-compose.monitoring.yml not found!"
               exit 1
             fi
-            
-            # Utiliser prometheus-remote.yml si disponible (pour VM séparée)
-            if [ -f "prometheus/prometheus-remote.yml" ]; then
-              echo "✅ Utilisation de prometheus-remote.yml (VM séparée)"
-              cp prometheus/prometheus-remote.yml prometheus/prometheus.yml
+            if [ ! -f "prometheus/prometheus.yml" ]; then
+              echo "ERROR: prometheus/prometheus.yml not found!"
+              exit 1
             fi
+            echo "✅ Fichiers de configuration trouvés"
             
             echo "🛑 Arrêt des services existants..."
             docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true

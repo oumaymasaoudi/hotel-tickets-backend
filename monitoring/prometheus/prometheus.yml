@@ -1,3 +1,8 @@
+# ============================================
+# PROMETHEUS - Configuration pour VM Monitoring Séparée
+# Architecture : Backend sur VM séparée, Monitoring sur VM ansible-controller
+# ============================================
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -23,37 +28,50 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # Node Exporter (métriques système de la VM)
+  # Node Exporter (métriques système de la VM Monitoring)
   - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
         labels:
-          instance: 'backend-vm'
+          instance: 'monitoring-vm'
           job: 'node-exporter'
+          environment: 'staging'
 
-  # cAdvisor (métriques des conteneurs Docker)
+  # cAdvisor (métriques des conteneurs sur la VM Monitoring)
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
         labels:
-          instance: 'backend-vm'
+          instance: 'monitoring-vm'
           job: 'cadvisor'
+          environment: 'staging'
 
-  # Backend Spring Boot (via Actuator)
+  # Backend Spring Boot (sur la VM Backend distante)
   - job_name: 'backend'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8081']
+      - targets: ['13.63.15.86:8081']  # Elastic IP de la VM Backend (IP fixe)
         labels:
           application: 'hotel-ticket-hub-backend'
           environment: 'staging'
+          instance: 'backend-vm'
     scrape_interval: 10s
+    scrape_timeout: 5s
 
-  # Frontend (si métriques disponibles)
-  - job_name: 'frontend'
+  # Frontend (désactivé - React n'expose pas de métriques Prometheus)
+  # - job_name: 'frontend'
+  #   static_configs:
+  #     - targets: ['13.50.221.51:80']  # IP de la VM Frontend
+  #       labels:
+  #         application: 'hotel-ticket-hub-frontend'
+  #         environment: 'staging'
+  #         instance: 'frontend-vm'
+
+  # Database VM (si Node Exporter installé)
+  - job_name: 'database-vm'
     static_configs:
-      - targets: ['host.docker.internal:80']
+      - targets: ['13.48.83.147:9100']  # IP de la VM Database + Node Exporter
         labels:
-          application: 'hotel-ticket-hub-frontend'
+          instance: 'database-vm'
           environment: 'staging'
 

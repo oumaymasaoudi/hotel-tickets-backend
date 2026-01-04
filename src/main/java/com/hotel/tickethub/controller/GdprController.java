@@ -40,7 +40,7 @@ import java.util.UUID;
         "http://localhost:8081",
         "http://localhost:5173",
         "http://192.168.58.1:5173",
-        "http://51.21.196.104"
+        "http://13.50.221.51"
 })
 public class GdprController {
 

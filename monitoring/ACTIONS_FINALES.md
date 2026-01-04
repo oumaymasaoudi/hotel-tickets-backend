@@ -24,7 +24,7 @@
 ssh -i C:\Users\oumay\.ssh\oumayma-key.pem ubuntu@13.62.53.224
 
 # Éditer la configuration Prometheus
-nano /opt/monitoring/prometheus/prometheus-remote.yml
+nano /opt/monitoring/prometheus/prometheus.yml
 
 # Vérifier/Changer la ligne 53 :
 # - targets: ['13.63.15.86:8081']
@@ -78,7 +78,7 @@ ssh -i C:\Users\oumay\.ssh\oumayma-key.pem ubuntu@13.63.15.86 "echo OK"
 | **Backend** | `13.63.15.86` | ✅ `13.63.15.86` | `t3.small` |
 | **Ansible/Monitoring** | `13.62.53.224` | ❌ | `t3.micro` |
 | **Frontend** | `51.21.196.104` | ❌ | `t3.micro` |
-| **Database** | `13.61.27.43` | ❌ | `t3.micro` |
+| **Database** | `13.48.83.147` | ✅ `13.48.83.147` | `t3.micro` |
 
 ---
 
