@@ -29,12 +29,11 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # Node Exporter (métriques système de la VM Monitoring)
-  - job_name: 'node-exporter'
+  - job_name: 'ancible-controller'
     static_configs:
       - targets: ['node-exporter:9100']
         labels:
           instance: 'monitoring-vm'
-          job: 'node-exporter'
           environment: 'staging'
 
   # cAdvisor (métriques des conteneurs sur la VM Monitoring)
@@ -46,25 +45,13 @@ scrape_configs:
           job: 'cadvisor'
           environment: 'staging'
 
-  # Backend Spring Boot (sur la VM Backend distante)
-  - job_name: 'backend'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['13.63.15.86:8081']  # Elastic IP de la VM Backend (IP fixe)
-        labels:
-          application: 'hotel-ticket-hub-backend'
-          environment: 'staging'
-          instance: 'backend-vm'
-    scrape_interval: 10s
-    scrape_timeout: 5s
 
   # Node Exporter (métriques système de la VM Backend)
-  - job_name: 'node-exporter-backend'
+  - job_name: 'staging-backend'
     static_configs:
       - targets: ['13.63.15.86:9100']  # Elastic IP de la VM Backend + Node Exporter
         labels:
           instance: 'backend-vm'
-          job: 'node-exporter'
           environment: 'staging'
 
   # Frontend (désactivé - React n'expose pas de métriques Prometheus)
@@ -83,4 +70,15 @@ scrape_configs:
         labels:
           instance: 'database-vm'
           environment: 'staging'
+
+  - job_name: 'staging-frontend'
+    static_configs:
+      - targets: ['13.50.221.51:9100']  # Elastic IP de la VM frontend + Node Exporter
+        labels:
+          instance: 'frontend-vm'
+          environment: 'staging'
+
+
+
+          
 
