@@ -1,0 +1,87 @@
+name: Check Backend Status
+
+on:
+  workflow_dispatch:  # Déclenchement manuel depuis GitHub Actions UI
+
+jobs:
+  check-backend:
+    name: Vérifier l'état du Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/backend_key
+          chmod 600 ~/.ssh/backend_key
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host backend-staging
+            HostName ${{ secrets.STAGING_HOST }}
+            User ${{ secrets.STAGING_USER }}
+            IdentityFile ~/.ssh/backend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+      
+      - name: Check Backend Status
+        run: |
+          ssh -F ~/.ssh/config backend-staging << 'EOF'
+            echo "=========================================="
+            echo "🔍 VÉRIFICATION DU BACKEND"
+            echo "=========================================="
+            echo ""
+            
+            echo "1️⃣ Conteneurs Docker:"
+            docker ps | grep backend || echo "   ❌ Backend non démarré"
+            echo ""
+            
+            echo "2️⃣ Port 8081:"
+            sudo ss -tlnp | grep 8081 || echo "   ❌ Port 8081 non utilisé"
+            echo ""
+            
+            echo "3️⃣ Test local (health):"
+            curl -s -o /dev/null -w "   HTTP Status: %{http_code}\n" http://localhost:8081/actuator/health || echo "   ❌ Backend non accessible localement"
+            echo ""
+            
+            echo "4️⃣ Test local (prometheus):"
+            curl -s http://localhost:8081/actuator/prometheus | head -5 || echo "   ❌ Métriques Prometheus non accessibles"
+            echo ""
+            
+            echo "5️⃣ Logs récents (dernières 50 lignes avec erreurs):"
+            docker logs hotel-ticket-hub-backend --tail=50 2>&1 | grep -i "error\|exception\|500\|actuator\|prometheus" | tail -20 || docker logs hotel-ticket-hub-backend --tail=20 2>&1 | tail -10
+            echo ""
+            
+            echo "6️⃣ Test détaillé Prometheus endpoint:"
+            curl -v http://localhost:8081/actuator/prometheus 2>&1 | head -30 || echo "   ❌ Erreur lors du test"
+            echo ""
+            
+            echo "7️⃣ Configuration Docker Compose:"
+            if [ -f /opt/backend/docker-compose.yml ]; then
+              echo "   ✅ docker-compose.yml existe"
+              grep -A 2 "ports:" /opt/backend/docker-compose.yml | head -3 || echo "   ⚠️ Configuration ports non trouvée"
+            else
+              echo "   ❌ docker-compose.yml non trouvé"
+            fi
+            echo ""
+            
+            echo "=========================================="
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/backend_key ~/.ssh/config ~/.ssh/known_hosts
+

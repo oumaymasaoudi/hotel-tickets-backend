@@ -1,0 +1,84 @@
+# ============================================
+# PROMETHEUS - Configuration pour VM Monitoring Séparée
+# Architecture : Backend sur VM séparée, Monitoring sur VM ansible-controller
+# ============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'hotel-ticket-hub-staging'
+    environment: 'staging'
+
+# Configuration Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Règles d'alerte
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Configuration des cibles à scraper
+scrape_configs:
+  # Prometheus lui-même
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter (métriques système de la VM Monitoring)
+  - job_name: 'ancible-controller'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          instance: 'monitoring-vm'
+          environment: 'staging'
+
+  # cAdvisor (métriques des conteneurs sur la VM Monitoring)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          instance: 'monitoring-vm'
+          job: 'cadvisor'
+          environment: 'staging'
+
+
+  # Node Exporter (métriques système de la VM Backend)
+  - job_name: 'staging-backend'
+    static_configs:
+      - targets: ['13.63.15.86:9100']  # Elastic IP de la VM Backend + Node Exporter
+        labels:
+          instance: 'backend-vm'
+          environment: 'staging'
+
+  # Frontend (désactivé - React n'expose pas de métriques Prometheus)
+  # - job_name: 'frontend'
+  #   static_configs:
+  #     - targets: ['13.50.221.51:80']  # IP de la VM Frontend
+  #       labels:
+  #         application: 'hotel-ticket-hub-frontend'
+  #         environment: 'staging'
+  #         instance: 'frontend-vm'
+
+  # Database VM (si Node Exporter installé)
+  - job_name: 'database-vm'
+    static_configs:
+      - targets: ['13.48.83.147:9100']  # IP de la VM Database + Node Exporter
+        labels:
+          instance: 'database-vm'
+          environment: 'staging'
+
+  - job_name: 'staging-frontend'
+    static_configs:
+      - targets: ['13.50.221.51:9100']  # Elastic IP de la VM frontend + Node Exporter
+        labels:
+          instance: 'frontend-vm'
+          environment: 'staging'
+
+
+
+          
+

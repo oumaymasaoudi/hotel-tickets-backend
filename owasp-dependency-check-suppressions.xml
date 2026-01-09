@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- 
+        Fichier de suppression pour OWASP Dependency Check
+        Utilisé pour supprimer les faux positifs ou vulnérabilités acceptées
+    -->
+    
+    <!-- Exemple de suppression (à adapter selon les résultats du scan) -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+            Faux positif - Vulnérabilité acceptée pour cette version
+        ]]></notes>
+        <gav regex="true">.*</gav>
+        <cve>CVE-XXXX-XXXX</cve>
+    </suppress>
+    -->
+</suppressions>
+

@@ -16,6 +16,7 @@ env:
   MAVEN_OPTS: '-Xmx2048m -XX:+UseG1GC'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/backend
+  MONITORING_DIR: /opt/monitoring
 
 jobs:
   # ============================================
@@ -361,9 +362,57 @@ jobs:
     needs: [docker-build]
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment: staging
+    timeout-minutes: 15  # Augmenté pour gérer les connexions SSH lentes
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Optimisation : ne récupérer que le dernier commit
+
+      - name: Verify docker-compose.yml exists
+        run: |
+          if [ ! -f "docker-compose.yml" ]; then
+            echo "ERROR: docker-compose.yml not found!"
+            exit 1
+          fi
+          echo "✅ docker-compose.yml found ($(du -h docker-compose.yml | cut -f1))"
+
+      - name: Setup SSH Config
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Ajouter l'host à known_hosts pour éviter les prompts
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host backend-staging
+            HostName ${{ secrets.STAGING_HOST }}
+            User ${{ secrets.STAGING_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Test SSH Connection
+        run: |
+          echo "🔍 Test de connexion SSH..."
+          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no backend-staging "echo 'SSH connection successful'" || {
+            echo "❌ Échec de la connexion SSH"
+            echo "Vérifiez que :"
+            echo "  - La VM est accessible depuis GitHub Actions"
+            echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
+            echo "  - Les secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY sont corrects"
+            exit 1
+          }
+          echo "✅ Connexion SSH OK"
 
       - name: Copy docker-compose to staging
         uses: appleboy/scp-action@v0.1.7
@@ -374,6 +423,10 @@ jobs:
           source: "docker-compose.yml"
           target: "/opt/hotel-ticket-hub-backend-staging/"
           strip_components: 0
+          timeout: 120s  # Augmenté pour gérer les connexions lentes
+          command_timeout: 60s
+          debug: true  # Activé pour diagnostiquer les problèmes
+          use_insecure_cipher: false
 
       - name: Deploy to staging VM
         uses: appleboy/ssh-action@v1.0.3
@@ -381,44 +434,328 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          timeout: 300s
+          command_timeout: 120s
+          debug: false
+          use_insecure_cipher: false
           script: |
-            set -e
+            set -euo pipefail  # Mode strict : erreur si variable non définie
             cd /opt/hotel-ticket-hub-backend-staging
             
+            echo "🛑 Arrêt des services existants..."
             # Stop old systemd service if it exists
-            sudo systemctl stop hotel-ticket-hub-backend-staging || true
-            sudo systemctl disable hotel-ticket-hub-backend-staging || true
+            sudo systemctl stop hotel-ticket-hub-backend-staging 2>/dev/null || true
+            sudo systemctl disable hotel-ticket-hub-backend-staging 2>/dev/null || true
             
             # Stop any container using port 8081
-            docker stop $(docker ps -q --filter "publish=8081") 2>/dev/null || true
-            docker rm $(docker ps -aq --filter "name=hotel-ticket-hub-backend-staging") 2>/dev/null || true
+            CONTAINERS=$(docker ps -q --filter "publish=8081" 2>/dev/null || true)
+            if [ -n "$CONTAINERS" ]; then
+              docker stop $CONTAINERS 2>/dev/null || true
+            fi
+            
+            # Stop any container using port 9100 (Node Exporter)
+            CONTAINERS_9100=$(docker ps -q --filter "publish=9100" 2>/dev/null || true)
+            if [ -n "$CONTAINERS_9100" ]; then
+              docker stop $CONTAINERS_9100 2>/dev/null || true
+              docker rm $CONTAINERS_9100 2>/dev/null || true
+            fi
+            
+            OLD_CONTAINERS=$(docker ps -aq --filter "name=hotel-ticket-hub-backend-staging" --filter "name=node-exporter-backend" 2>/dev/null || true)
+            if [ -n "$OLD_CONTAINERS" ]; then
+              docker rm -f $OLD_CONTAINERS 2>/dev/null || true
+            fi
             
             # Stop and remove old docker-compose containers
-            docker compose down || true
+            docker compose down 2>/dev/null || true
             
-            # Verify .env file exists
+            echo "✅ Vérification du fichier .env..."
             if [ ! -f .env ]; then
               echo "ERROR: .env file not found! Please create it first."
               exit 1
             fi
             
-            # Log in to GitHub Container Registry
+            echo "🔐 Connexion à GitHub Container Registry..."
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # Pull latest image
+            echo "📥 Pull de l'image Docker..."
             export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:develop
             docker pull $DOCKER_IMAGE || docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
             
-            # Start new container with .env file
+            echo "🚀 Démarrage du conteneur..."
             export DOCKER_IMAGE=$DOCKER_IMAGE
             docker compose --env-file .env up -d
             
-            # Wait for startup
+            echo "⏳ Attente du démarrage (10s)..."
             sleep 10
             
-            # Show logs
+            echo "📋 Logs récents:"
             docker compose logs --tail=50
             
-            # Verify container is running
-            docker ps | grep hotel-ticket-hub-backend-staging
+            echo "✅ Vérification du conteneur..."
+            if docker ps | grep -q hotel-ticket-hub-backend-staging; then
+              echo "✅ Backend déployé avec succès!"
+            else
+              echo "❌ Le conteneur n'est pas en cours d'exécution"
+              exit 1
+            fi
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key ~/.ssh/config ~/.ssh/known_hosts
+
+  # ============================================
+  # DEPLOY MONITORING (for develop branch)
+  # Déployé après le backend pour s'assurer que le monitoring
+  # peut scraper les métriques du backend déployé
+  # ============================================
+  deploy-monitoring:
+    name: Backend - Deploy Monitoring Stack
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: monitoring
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-monitoring
+      cancel-in-progress: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify monitoring files exist
+        run: |
+          if [ ! -d "monitoring" ]; then
+            echo "ERROR: monitoring directory not found!"
+            exit 1
+          fi
+          echo "✅ Monitoring directory found"
+          echo "📁 Files to deploy:"
+          find monitoring -type f -name "*.yml" -o -name "*.yaml" -o -name "*.conf" | head -20
+
+      - name: Setup SSH Config
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.MONITORING_SSH_PRIVATE_KEY }}" > ~/.ssh/monitoring_key
+          chmod 600 ~/.ssh/monitoring_key
+          # Ajouter l'host à known_hosts
+          ssh-keyscan -H ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Configuration SSH optimisée
+          cat >> ~/.ssh/config << EOF
+          Host monitoring-vm
+            HostName ${{ secrets.MONITORING_HOST }}
+            User ${{ secrets.MONITORING_USER }}
+            IdentityFile ~/.ssh/monitoring_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Test SSH Connection
+        run: |
+          echo "🔍 Test de connexion SSH vers la VM Monitoring..."
+          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no monitoring-vm "echo 'SSH connection successful'" || {
+            echo "❌ Échec de la connexion SSH"
+            echo "Vérifiez que :"
+            echo "  - La VM Monitoring est accessible depuis GitHub Actions"
+            echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
+            echo "  - Les secrets MONITORING_HOST, MONITORING_USER, MONITORING_SSH_PRIVATE_KEY sont corrects"
+            exit 1
+          }
+          echo "✅ Connexion SSH OK"
+
+      - name: Copy monitoring files to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          source: "monitoring/"
+          target: "${{ env.MONITORING_DIR }}/"
+          strip_components: 1  # Enlever le préfixe "monitoring/"
+          timeout: 120s
+          command_timeout: 60s
+          debug: false
+          use_insecure_cipher: false
+
+      - name: Deploy Monitoring Stack
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          timeout: 300s
+          command_timeout: 120s
+          debug: false
+          use_insecure_cipher: false
+          script: |
+            set -euo pipefail
+            cd ${{ env.MONITORING_DIR }}
+            
+            echo "🔍 Vérification des fichiers..."
+            if [ ! -f "docker-compose.monitoring.yml" ]; then
+              echo "ERROR: docker-compose.monitoring.yml not found!"
+              exit 1
+            fi
+            if [ ! -f "prometheus/prometheus.yml" ]; then
+              echo "ERROR: prometheus/prometheus.yml not found!"
+              exit 1
+            fi
+            echo "✅ Fichiers de configuration trouvés"
+            
+            echo "🛑 Arrêt des services existants..."
+            docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
+            
+            # Nettoyer complètement : arrêter tous les conteneurs monitoring
+            echo "🔧 Nettoyage des conteneurs monitoring..."
+            for container in prometheus grafana alertmanager node-exporter cadvisor; do
+              docker ps -a --filter "name=$container" --format "{{.ID}}" | while read id; do
+                [ -n "$id" ] && docker rm -f "$id" 2>/dev/null || true
+              done
+            done
+            
+            # Supprimer le réseau existant (forcer si nécessaire)
+            echo "🔧 Suppression du réseau monitoring-network..."
+            # Essayer plusieurs fois avec différentes méthodes
+            for i in 1 2 3; do
+              if docker network ls | grep -q monitoring-network; then
+                echo "  Tentative $i: Suppression du réseau..."
+                docker network rm monitoring-network 2>/dev/null && break || {
+                  if [ $i -eq 1 ]; then
+                    echo "  ⚠️  Le réseau est encore utilisé, nettoyage des réseaux non utilisés..."
+                    docker network prune -f
+                    sleep 2
+                  elif [ $i -eq 2 ]; then
+                    echo "  ⚠️  Réessai après nettoyage..."
+                    sleep 2
+                  else
+                    echo "  ⚠️  Impossible de supprimer le réseau, on continue quand même..."
+                  fi
+                }
+              else
+                echo "  ✅ Le réseau n'existe plus"
+                break
+              fi
+            done
+            sleep 2
+            
+            echo "📥 Pull des images Docker..."
+            docker compose -f docker-compose.monitoring.yml pull
+            
+            echo "🚀 Démarrage de la stack de monitoring..."
+            # Démarrer avec gestion d'erreur pour le réseau
+            set +e  # Ne pas arrêter sur les erreurs
+            docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+            COMPOSE_EXIT_CODE=$?
+            set -e  # Réactiver l'arrêt sur erreur
+            
+            if [ $COMPOSE_EXIT_CODE -ne 0 ]; then
+              echo "⚠️  Erreur détectée, vérification du réseau..."
+              # Si l'erreur est liée au réseau, supprimer le réseau et réessayer
+              if docker network ls | grep -q monitoring-network; then
+                echo "🔧 Suppression forcée du réseau problématique..."
+                # Arrêter tous les conteneurs qui utilisent ce réseau
+                CONTAINER_IDS=$(docker ps --filter network=monitoring-network -q 2>/dev/null || true)
+                if [ -n "$CONTAINER_IDS" ]; then
+                  echo "$CONTAINER_IDS" | xargs docker stop 2>/dev/null || true
+                  echo "$CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
+                fi
+                OLD_CONTAINER_IDS=$(docker ps -a --filter network=monitoring-network -q 2>/dev/null || true)
+                if [ -n "$OLD_CONTAINER_IDS" ]; then
+                  echo "$OLD_CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
+                fi
+                # Supprimer le réseau
+                docker network rm monitoring-network 2>/dev/null || docker network prune -f
+                sleep 3
+                echo "🔄 Nouvelle tentative de démarrage..."
+                docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+              else
+                echo "❌ Erreur non liée au réseau, voir les logs"
+                docker compose -f docker-compose.monitoring.yml logs
+                exit 1
+              fi
+            fi
+            
+            echo "⏳ Attente du démarrage (15s)..."
+            sleep 15
+            
+            echo "📋 Statut des conteneurs:"
+            docker compose -f docker-compose.monitoring.yml ps
+            
+            echo "✅ Vérification des services..."
+            # Vérifier Prometheus
+            if docker ps | grep -q prometheus; then
+              echo "✅ Prometheus est en cours d'exécution"
+            else
+              echo "❌ Prometheus n'est pas démarré"
+              docker compose -f docker-compose.monitoring.yml logs prometheus | tail -20
+              exit 1
+            fi
+            
+            # Vérifier Grafana
+            if docker ps | grep -q grafana; then
+              echo "✅ Grafana est en cours d'exécution"
+            else
+              echo "❌ Grafana n'est pas démarré"
+              docker compose -f docker-compose.monitoring.yml logs grafana | tail -20
+              exit 1
+            fi
+            
+            echo "📋 Logs récents (dernières 10 lignes):"
+            docker compose -f docker-compose.monitoring.yml logs --tail=10
+            
+            echo "✅ Monitoring stack déployé avec succès!"
+            echo "🔗 Prometheus devrait maintenant scraper le backend sur ${{ secrets.STAGING_HOST }}:8081"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/monitoring_key ~/.ssh/config ~/.ssh/known_hosts
+
+  # ============================================
+  # RELEASE (semantic versioning + changelog)
+  # ============================================
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [build, test, sonar]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Cache désactivé car package-lock.json n'existe pas encore
+          # cache: 'npm'
+          # cache-dependency-path: package-lock.json
+
+      - name: Install semantic-release dependencies
+        run: npm install
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
 

@@ -56,7 +56,7 @@ public class SecurityConfig {
                 "http://localhost:8080",
                 "http://localhost:8081",
                 "http://192.168.58.1:5173",
-                "http://51.21.196.104"));
+                "http://13.50.221.51"));
 
         // ✅ Autoriser toutes les méthodes HTTP
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

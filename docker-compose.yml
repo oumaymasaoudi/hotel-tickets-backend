@@ -3,6 +3,11 @@ services:
     image: ${DOCKER_IMAGE:-ticket-hub-backend:latest}
     container_name: hotel-ticket-hub-backend-staging
     restart: unless-stopped
+    # Limites de mémoire Docker (pour t3.small avec 2 Go RAM)
+    # Architecture : VM Backend = application Spring Boot + Node Exporter
+    # Monitoring = sur VM Ansible séparée
+    mem_limit: 1536m  # Limite à 1.5 Go (laisse ~500 Mo pour le système)
+    mem_reservation: 512m  # Réservation minimale de 512 Mo
     env_file:
       - .env
     ports:
@@ -24,8 +29,35 @@ services:
       - SPRING_MAIL_PORT=${SPRING_MAIL_PORT}
       - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME}
       - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD}
+      # Limites de mémoire Java (ajustées pour t3.small - 2 Go RAM)
+      # Architecture : VM Backend = application Spring Boot + Node Exporter
+      # Monitoring (Prometheus, Grafana) = sur VM Ansible séparée
+      # - t3.small (2 Go) : -Xmx1024m -Xms512m (recommandé pour backend seul)
+      # - t3.medium (4 Go) : -Xmx2048m -Xms1024m (production)
+      - JAVA_OPTS=-Xmx1024m -Xms512m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
     volumes:
       - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - backend-network
+
+  # ============================================
+  # NODE EXPORTER - Métriques système de la VM Backend
+  # ============================================
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter-backend
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
     networks:
       - backend-network
 
