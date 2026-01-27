@@ -36,20 +36,31 @@ public class HotelService {
     }
 
     public Hotel createHotel(HotelRequest request) {
+        System.out.println("DEBUG - createHotel: request=" + request);
+        
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new RuntimeException("Le nom de l'hôtel est requis");
+        }
+        
+        if (request.getPlanId() == null) {
+            throw new RuntimeException("Le plan d'abonnement est requis");
+        }
+        
         Hotel hotel = new Hotel();
         hotel.setName(request.getName());
         hotel.setAddress(request.getAddress());
         hotel.setEmail(request.getEmail());
         hotel.setPhone(request.getPhone());
+        // Note: city, country, zipCode ne sont pas dans le modèle Hotel actuellement
         hotel.setIsActive(true);
 
-        if (request.getPlanId() != null) {
-            Plan plan = planRepository.findById(request.getPlanId())
-                    .orElseThrow(() -> new RuntimeException("Plan not found"));
-            hotel.setPlan(plan);
-        }
+        Plan plan = planRepository.findById(request.getPlanId())
+                .orElseThrow(() -> new RuntimeException("Plan not found with ID: " + request.getPlanId()));
+        hotel.setPlan(plan);
 
-        return hotelRepository.save(hotel);
+        Hotel savedHotel = hotelRepository.save(hotel);
+        System.out.println("DEBUG - createHotel: Hotel created successfully with ID=" + savedHotel.getId());
+        return savedHotel;
     }
 
     public Optional<Hotel> updateHotel(UUID id, HotelRequest request) {

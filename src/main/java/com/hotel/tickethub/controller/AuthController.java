@@ -3,11 +3,14 @@ package com.hotel.tickethub.controller;
 import com.hotel.tickethub.dto.AuthResponse;
 import com.hotel.tickethub.dto.LoginRequest;
 import com.hotel.tickethub.dto.RegisterRequest;
+import com.hotel.tickethub.model.User;
+import com.hotel.tickethub.repository.UserRepository;
 import com.hotel.tickethub.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -25,6 +28,8 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
 
     @PostMapping("/register")
     public ResponseEntity<Object> register(@Valid @RequestBody RegisterRequest request) {
@@ -106,5 +111,49 @@ public class AuthController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(errorResponse);
         }
+    }
+
+    /**
+     * Temporary endpoint to generate BCrypt hash for a password
+     * Usage: GET /api/auth/generate-hash?password=admin123
+     */
+    @GetMapping("/generate-hash")
+    public ResponseEntity<Map<String, String>> generateHash(@RequestParam String password) {
+        String hash = passwordEncoder.encode(password);
+        Map<String, String> response = new HashMap<>();
+        response.put("password", password);
+        response.put("hash", hash);
+        response.put("sql", "UPDATE users SET password = '" + hash + "' WHERE email = 'oumaymasaoudi6@gmail.com';");
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Test endpoint to verify password matching
+     * Usage: GET /api/auth/test-password?password=admin123
+     */
+    @GetMapping("/test-password")
+    public ResponseEntity<Map<String, Object>> testPassword(@RequestParam String password) {
+        Map<String, Object> response = new HashMap<>();
+
+        // Get user from database
+        User user = userRepository.findByEmail("oumaymasaoudi6@gmail.com")
+                .orElse(null);
+
+        if (user == null) {
+            response.put("error", "User not found");
+            return ResponseEntity.ok(response);
+        }
+
+        String storedHash = user.getPassword();
+        boolean matches = passwordEncoder.matches(password, storedHash);
+
+        response.put("email", user.getEmail());
+        response.put("password_provided", password);
+        response.put("password_length", password.length());
+        response.put("stored_hash", storedHash);
+        response.put("hash_length", storedHash != null ? storedHash.length() : 0);
+        response.put("matches", matches);
+
+        return ResponseEntity.ok(response);
     }
 }

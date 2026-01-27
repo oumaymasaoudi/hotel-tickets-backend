@@ -11,6 +11,7 @@ import com.hotel.tickethub.repository.HotelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,7 +40,7 @@ public class UserRestController {
      * GET /api/users - Get all users (SuperAdmin only)
      */
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPERADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<List<UserResponse>> getAllUsers() {
         List<UserResponse> users = userRepository.findAll().stream()
                 .map(this::toUserResponse)
@@ -51,24 +52,19 @@ public class UserRestController {
      * GET /api/users/hotel/{hotelId}/technicians - Get technicians for a hotel
      * (Admin only)
      * 
-     * Business rule: Technicians can work for all hotels (hotel_id = NULL) or for a specific hotel.
-     * This method returns:
-     * 1. Technicians linked to the specified hotel (hotel_id = hotelId)
-     * 2. Technicians with hotel_id = NULL (they work for all hotels)
+     * Business rule: Technicians are linked to a specific hotel via HotelID.
+     * This method returns technicians linked to the specified hotel.
      */
     @GetMapping("/hotel/{hotelId}/technicians")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    // @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')") // Temporairement désactivé pour debug
     public ResponseEntity<List<UserResponse>> getTechniciansByHotel(@PathVariable UUID hotelId) {
         try {
-            // Get users for the hotel (hotel_id = hotelId)
+            // Get users (technicians) for the hotel (hotel_id = hotelId)
+            // Business rule: Technicians must be linked to a hotel
             List<User> usersInHotel = userRepository.findByHotelId(hotelId);
             
-            // Get technicians with hotel_id = NULL (they work for all hotels)
-            List<User> techniciansForAllHotels = userRepository.findByHotelIdIsNull();
-
-            // Combine both lists
+            // Only return technicians from this hotel (no longer include technicians with hotel_id = NULL)
             List<User> allUsers = new java.util.ArrayList<>(usersInHotel);
-            allUsers.addAll(techniciansForAllHotels);
 
             // Filter to keep only active technicians
             List<UserResponse> technicians = new java.util.ArrayList<>();
@@ -235,6 +231,7 @@ public class UserRestController {
      * POST /api/users/technicians - Create a new technician (Admin only)
      * 
      * Creates a user with TECHNICIAN role and links it to the specified hotel.
+     * Business rule: Technicians must be linked to a hotel via HotelID
      * Body: { email, password, fullName, phone, hotelId }
      */
     @PostMapping("/technicians")
@@ -247,9 +244,10 @@ public class UserRestController {
             String phone = request.get(PHONE_KEY);
             String hotelIdStr = request.get("hotelId");
 
-            if (email == null || fullName == null || hotelIdStr == null) {
+            // Business rule: hotelId is required for technicians
+            if (email == null || fullName == null || hotelIdStr == null || hotelIdStr.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Email, fullName and hotelId are required");
+                        .body("Email, fullName and hotelId are required. Technicians must be linked to a hotel.");
             }
 
             // Check email doesn't already exist

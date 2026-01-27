@@ -46,7 +46,7 @@ class HotelServiceTest {
 
         testPlan = new Plan();
         testPlan.setId(testPlanId);
-        testPlan.setName(com.hotel.tickethub.model.enums.SubscriptionPlan.BASIC);
+        testPlan.setName(com.hotel.tickethub.model.enums.SubscriptionPlan.STARTER);
 
         testHotel = new Hotel();
         testHotel.setId(testHotelId);

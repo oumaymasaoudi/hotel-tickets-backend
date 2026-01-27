@@ -24,9 +24,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
         try {
             String jwt = getJwtFromRequest(request);
+            logger.debug("JWT Filter - Request URI: " + request.getRequestURI() + ", JWT present: " + (jwt != null));
 
-            if (isValidJwt(jwt)) {
-                processJwtAuthentication(jwt, request);
+            if (jwt != null && !jwt.isEmpty()) {
+                // Development mode: handle "dev-token"
+                if ("dev-token".equals(jwt)) {
+                    logger.debug("Processing dev-token authentication");
+                    processDevTokenAuthentication(request);
+                } else {
+                    // Production mode: validate normal JWT
+                    logger.debug("Processing JWT authentication");
+                    processJwtAuthentication(jwt, request);
+                }
+            } else {
+                logger.debug("No JWT token found in request");
             }
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);
@@ -43,8 +54,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private boolean isValidJwt(String jwt) {
-        return jwt != null && !jwt.isEmpty();
+    /**
+     * Process development mode authentication with "dev-token"
+     * Uses email from X-User-Email header
+     */
+    private void processDevTokenAuthentication(HttpServletRequest request) {
+        String userEmail = request.getHeader("X-User-Email");
+        if (userEmail == null || userEmail.isEmpty()) {
+            logger.warn("dev-token provided but X-User-Email header is missing");
+            return;
+        }
+
+        try {
+            var userDetails = userDetailsService.loadUserByUsername(userEmail);
+            logger.info("Loading user for dev-token: " + userEmail + " with authorities: " + userDetails.getAuthorities());
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails, null, userDetails.getAuthorities());
+            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            logger.info("Authentication set successfully for user: " + userEmail);
+        } catch (Exception ex) {
+            logger.error("Could not load user for dev-token with email: " + userEmail, ex);
+        }
     }
 
     private void processJwtAuthentication(String jwt, HttpServletRequest request) {
