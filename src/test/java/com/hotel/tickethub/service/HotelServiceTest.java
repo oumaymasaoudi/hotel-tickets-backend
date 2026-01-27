@@ -149,26 +149,21 @@ class HotelServiceTest {
         request.setPhone("9876543210");
         request.setPlanId(null);
 
-        when(hotelRepository.save(any(Hotel.class))).thenAnswer(invocation -> {
-            Hotel hotel = invocation.getArgument(0);
-            hotel.setId(UUID.randomUUID());
-            return hotel;
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            hotelService.createHotel(request);
         });
 
-        Hotel result = hotelService.createHotel(request);
-
-        assertNotNull(result);
-        assertEquals("New Hotel", result.getName());
-        assertNull(result.getPlan());
-        verify(planRepository, never()).findById(any());
-        verify(hotelRepository, times(1)).save(any(Hotel.class));
+        assertEquals("Le plan d'abonnement est requis", exception.getMessage());
+        verify(planRepository, never()).findById(any(UUID.class));
+        verify(hotelRepository, never()).save(any(Hotel.class));
     }
 
     @Test
     void testCreateHotel_PlanNotFound() {
         HotelRequest request = new HotelRequest();
         request.setName("New Hotel");
-        request.setPlanId(UUID.randomUUID());
+        UUID planId = UUID.randomUUID();
+        request.setPlanId(planId);
 
         when(planRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
 
@@ -176,7 +171,7 @@ class HotelServiceTest {
             hotelService.createHotel(request);
         });
 
-        assertEquals("Plan not found", exception.getMessage());
+        assertEquals("Plan not found with ID: " + planId, exception.getMessage());
         verify(planRepository, times(1)).findById(any(UUID.class));
         verify(hotelRepository, never()).save(any(Hotel.class));
     }
