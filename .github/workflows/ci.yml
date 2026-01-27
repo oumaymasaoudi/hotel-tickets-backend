@@ -295,18 +295,11 @@ jobs:
             echo "Report size: $(du -h target/site/jacoco/jacoco.xml)"
           fi
       
-      - name: SonarQube Analysis
-        run: |
-          mvn -B sonar:sonar \
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
-            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.scanner.force-deprecated-java-version=true \
-            -Dsonar.verbose=true || echo "SonarQube analysis failed, but continuing..."
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
         env:
-          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
 
   # ============================================
@@ -645,6 +638,25 @@ jobs:
               fi
             done
             sleep 2
+            
+            echo "💾 Vérification de l'espace disque..."
+            df -h / | tail -1
+            
+            echo "🧹 Nettoyage de l'espace disque Docker..."
+            # Nettoyer les images non utilisées (sauf celles en cours d'utilisation)
+            docker image prune -af --filter "until=24h" || true
+            
+            # Nettoyer les conteneurs arrêtés
+            docker container prune -f || true
+            
+            # Nettoyer les volumes non utilisés (attention: peut supprimer des données)
+            docker volume prune -f || true
+            
+            # Nettoyer le système Docker (images, conteneurs, réseaux, volumes)
+            docker system prune -af --volumes --filter "until=24h" || true
+            
+            echo "💾 Espace disque après nettoyage:"
+            df -h / | tail -1
             
             echo "📥 Pull des images Docker..."
             docker compose -f docker-compose.monitoring.yml pull
