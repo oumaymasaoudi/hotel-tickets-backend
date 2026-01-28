@@ -7,6 +7,7 @@ import com.hotel.tickethub.model.Plan;
 import com.hotel.tickethub.repository.HotelRepository;
 import com.hotel.tickethub.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class HotelService {
 
     private final HotelRepository hotelRepository;
@@ -36,6 +38,16 @@ public class HotelService {
     }
 
     public Hotel createHotel(HotelRequest request) {
+        log.debug("createHotel: request={}", request);
+        
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new RuntimeException("Le nom de l'hôtel est requis");
+        }
+        
+        if (request.getPlanId() == null) {
+            throw new RuntimeException("Le plan d'abonnement est requis");
+        }
+        
         Hotel hotel = new Hotel();
         hotel.setName(request.getName());
         hotel.setAddress(request.getAddress());
@@ -43,13 +55,13 @@ public class HotelService {
         hotel.setPhone(request.getPhone());
         hotel.setIsActive(true);
 
-        if (request.getPlanId() != null) {
-            Plan plan = planRepository.findById(request.getPlanId())
-                    .orElseThrow(() -> new RuntimeException("Plan not found"));
-            hotel.setPlan(plan);
-        }
+        Plan plan = planRepository.findById(request.getPlanId())
+                .orElseThrow(() -> new RuntimeException("Plan not found with ID: " + request.getPlanId()));
+        hotel.setPlan(plan);
 
-        return hotelRepository.save(hotel);
+        Hotel savedHotel = hotelRepository.save(hotel);
+        log.info("Hotel created successfully with ID={}", savedHotel.getId());
+        return savedHotel;
     }
 
     public Optional<Hotel> updateHotel(UUID id, HotelRequest request) {

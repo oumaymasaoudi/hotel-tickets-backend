@@ -6,6 +6,7 @@ import com.hotel.tickethub.dto.UpdateTicketStatusRequest;
 import com.hotel.tickethub.service.TicketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/tickets")
 @RequiredArgsConstructor
+@Slf4j
 public class TicketController {
 
     private final TicketService ticketService;
@@ -63,13 +65,27 @@ public class TicketController {
     @GetMapping("/hotel/{hotelId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<List<TicketResponse>> getTicketsByHotel(@PathVariable UUID hotelId) {
-        return ResponseEntity.ok(ticketService.getTicketsByHotel(hotelId));
+        try {
+            log.debug("Fetching tickets for hotel: {}", hotelId);
+            return ResponseEntity.ok(ticketService.getTicketsByHotel(hotelId));
+        } catch (Exception e) {
+            log.error("Error fetching tickets for hotel {}: {}", hotelId, e.getMessage(), e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @GetMapping("/technician/{technicianId}")
     @PreAuthorize("hasRole('TECHNICIAN')")
     public ResponseEntity<List<TicketResponse>> getTicketsByTechnician(@PathVariable UUID technicianId) {
-        return ResponseEntity.ok(ticketService.getTicketsByTechnician(technicianId));
+        try {
+            log.debug("Fetching tickets for technician: {}", technicianId);
+            List<TicketResponse> tickets = ticketService.getTicketsByTechnician(technicianId);
+            log.debug("Found {} tickets for technician: {}", tickets.size(), technicianId);
+            return ResponseEntity.ok(tickets);
+        } catch (Exception e) {
+            log.error("Error fetching tickets for technician {}: {}", technicianId, e.getMessage(), e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
@@ -87,6 +103,16 @@ public class TicketController {
             @PathVariable UUID ticketId,
             @Valid @RequestBody UpdateTicketStatusRequest request,
             @RequestParam UUID userId) {
-        return ResponseEntity.ok(ticketService.updateTicketStatus(ticketId, request, userId));
+        try {
+            log.debug("Updating ticket status - ticketId: {}, userId: {}, status: {}, technicianId: {}", 
+                ticketId, userId, request.getStatus(), request.getTechnicianId());
+            
+            TicketResponse result = ticketService.updateTicketStatus(ticketId, request, userId);
+            log.info("Ticket status updated successfully - ticketId: {}, status: {}", ticketId, request.getStatus());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error updating ticket status - ticketId: {}, error: {}", ticketId, e.getMessage(), e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST).build();
+        }
     }
 }

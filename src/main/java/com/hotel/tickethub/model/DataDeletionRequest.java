@@ -16,8 +16,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "data_deletion_requests", indexes = {
-    @Index(name = "idx_user_id", columnList = "user_id"),
-    @Index(name = "idx_status", columnList = "status")
+        @Index(name = "idx_data_deletion_user_id", columnList = "user_id"),
+        @Index(name = "idx_data_deletion_status", columnList = "status")
 })
 @Data
 @Builder
@@ -91,4 +91,3 @@ public class DataDeletionRequest {
         REJECTED
     }
 }
-

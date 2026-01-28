@@ -2,7 +2,7 @@
 
 Spring Boot backend application for the Hotel Ticket Hub system.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -22,7 +22,7 @@ mvn spring-boot:run
 
 The application will start on `http://localhost:8080`
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -35,7 +35,7 @@ mvn clean test jacoco:report
 open target/site/jacoco/index.html
 ```
 
-## 🔧 CI/CD
+## CI/CD
 
 The project includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs:
 
@@ -44,14 +44,14 @@ The project includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that
 - **Build**: Maven package
 - **SonarQube**: Code quality analysis
 
-## 📝 Code Quality
+## Code Quality
 
 - **Checkstyle**: Code style checking
 - **SpotBugs**: Bug detection
 - **JaCoCo**: Code coverage (minimum 50%)
 - **SonarQube**: Quality gate
 
-## 🔍 SonarQube Local
+## SonarQube Local
 
 To run SonarQube locally:
 
@@ -61,7 +61,7 @@ docker-compose -f docker-compose.sonarqube.yml up -d
 
 Access SonarQube at `http://localhost:9000` (admin/admin)
 
-## 📋 Features
+## Features
 
 - **Authentication & Authorization**: JWT-based with role-based access control
 - **Ticket Management**: CRUD operations for tickets
@@ -71,11 +71,11 @@ Access SonarQube at `http://localhost:9000` (admin/admin)
 - **Comments**: Ticket comments system
 - **Notifications**: Real-time notifications
 
-## 📄 License
+## License
 
 This project is part of an academic assignment.
 
-## 👥 Authors
+## Authors
 
 Hotel Ticket Hub Development Team
 

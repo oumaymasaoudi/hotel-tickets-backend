@@ -53,23 +53,24 @@ public class AuthService {
             user.setSpecialties(request.getSpecialties());
         }
 
-        // Business rule: Admin must be linked to a hotel
-        // Technicians work for all hotels, so they don't need a hotelId
-        if (request.getRole() != null && request.getRole().toUpperCase().equals("ADMIN")) {
+        // Business rule: Admin and Technician must be linked to a hotel
+        // Rule: "Un utilisateur (technicien ou admin) est rattaché à un hôtel via son
+        // HotelID"
+        if (request.getRole() != null &&
+                (request.getRole().toUpperCase().equals("ADMIN") ||
+                        request.getRole().toUpperCase().equals("TECHNICIAN"))) {
             if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
-                throw new RuntimeException("An ADMIN must be linked to a hotel");
+                throw new RuntimeException("An ADMIN or TECHNICIAN must be linked to a hotel");
             }
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
                     .orElseThrow(() -> new RuntimeException("Hotel not found"));
             user.setHotel(hotel);
         } else if (request.getHotelId() != null && !request.getHotelId().isEmpty()) {
-            // For other roles (CLIENT, TECHNICIAN), hotel is optional
-            // Technicians work for all hotels, so hotelId is not required
+            // For other roles (CLIENT), hotel is optional
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
                     .orElseThrow(() -> new RuntimeException("Hotel not found"));
             user.setHotel(hotel);
         }
-        // Technicians without hotelId: user.setHotel(null) - they work for all hotels
 
         user = userRepository.save(user);
 
@@ -122,11 +123,33 @@ public class AuthService {
             userRepository.save(user);
         }
 
+        // Try multiple methods to find user role (handles VARCHAR to UUID conversion
+        // issue)
         UserRole userRole = userRoleRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new RuntimeException("User role not found. Contact administrator."));
+                .or(() -> userRoleRepository.findByUserIdCustom(user.getId()))
+                .or(() -> userRoleRepository.findByUserIdNative(user.getId()))
+                .orElseThrow(() -> {
+                    // Debug: Log the issue
+                    System.out.println("DEBUG - User ID: " + user.getId());
+                    System.out.println("DEBUG - User ID type: " + user.getId().getClass().getName());
+                    return new RuntimeException("User role not found. Contact administrator. User ID: " + user.getId());
+                });
+
+        // Debug: Log password verification details
+        String providedPassword = request.getPassword();
+        String storedHash = user.getPassword();
+        System.out.println("DEBUG Login - Email: " + user.getEmail());
+        System.out.println("DEBUG Login - Provided password length: "
+                + (providedPassword != null ? providedPassword.length() : 0));
+        System.out.println("DEBUG Login - Stored hash length: " + (storedHash != null ? storedHash.length() : 0));
+        System.out.println("DEBUG Login - Stored hash start: "
+                + (storedHash != null && storedHash.length() > 30 ? storedHash.substring(0, 30) : storedHash));
 
         // Password verification with BCrypt
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        boolean passwordMatches = passwordEncoder.matches(providedPassword, storedHash);
+        System.out.println("DEBUG Login - Password matches: " + passwordMatches);
+
+        if (!passwordMatches) {
             // Rule 13: Increment failed attempts
             int attempts = (user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0) + 1;
             user.setFailedLoginAttempts(attempts);

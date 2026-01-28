@@ -1,5 +1,6 @@
 package com.hotel.tickethub.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,13 +14,14 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Consentement RGPD - Conformité avec le Règlement Général sur la Protection des Données
+ * Consentement RGPD - Conformité avec le Règlement Général sur la Protection
+ * des Données
  * Article 6 et 7 du RGPD : Consentement explicite et traçable
  */
 @Entity
 @Table(name = "gdpr_consents", indexes = {
-    @Index(name = "idx_user_id", columnList = "user_id"),
-    @Index(name = "idx_consent_type", columnList = "consent_type")
+        @Index(name = "idx_gdpr_consent_user_id", columnList = "user_id"),
+        @Index(name = "idx_gdpr_consent_type", columnList = "consent_type")
 })
 @Data
 @Builder
@@ -37,6 +39,7 @@ public class GdprConsent {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore // Prevent infinite recursion during JSON serialization
     private User user;
 
     /**
@@ -87,4 +90,3 @@ public class GdprConsent {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }
-

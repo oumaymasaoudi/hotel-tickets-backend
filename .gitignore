@@ -78,6 +78,9 @@ build/
 # SQL scripts (temporary)
 *.sql
 
+# Documentation temporaire
+START_BACKEND.md
+
 # local secrets
 src/main/resources/application.properties
 

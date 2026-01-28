@@ -34,7 +34,7 @@ public class ReportScheduler {
      */
     @Scheduled(cron = "0 0 8 1 * *") // 1er du mois à 8h00
     public void sendMonthlyReports() {
-        log.info("📊 SCHEDULER - Début envoi rapports mensuels");
+        log.info("SCHEDULER - Starting monthly reports sending");
 
         LocalDateTime now = LocalDateTime.now();
         int year = now.getYear();
@@ -51,13 +51,13 @@ public class ReportScheduler {
             try {
                 var report = reportService.generateMonthlyReport(hotel.getId(), year, month);
                 emailService.sendReport(hotel, report, "Mensuel");
-                log.info("✅ Rapport mensuel envoyé pour: {}", hotel.getName());
+                log.info("Monthly report sent for: {}", hotel.getName());
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'envoi du rapport mensuel pour {}: {}", hotel.getName(), e.getMessage());
+                log.error("Error sending monthly report for {}: {}", hotel.getName(), e.getMessage());
             }
         }
 
-        log.info("📊 SCHEDULER - Fin envoi rapports mensuels");
+        log.info("SCHEDULER - Finished monthly reports sending");
     }
 
     /**
@@ -66,7 +66,7 @@ public class ReportScheduler {
      */
     @Scheduled(cron = "0 0 8 * * MON") // Chaque lundi à 8h00
     public void sendWeeklyReports() {
-        log.info("📊 SCHEDULER - Début envoi rapports hebdomadaires");
+        log.info("SCHEDULER - Starting weekly reports sending");
 
         LocalDateTime weekStart = LocalDateTime.now().minusWeeks(1).withHour(0).withMinute(0).withSecond(0);
 
@@ -76,14 +76,14 @@ public class ReportScheduler {
             try {
                 var report = reportService.generateWeeklyReport(hotel.getId(), weekStart);
                 emailService.sendReport(hotel, report, "Hebdomadaire");
-                log.info("✅ Rapport hebdomadaire envoyé pour: {}", hotel.getName());
+                log.info("Weekly report sent for: {}", hotel.getName());
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'envoi du rapport hebdomadaire pour {}: {}", hotel.getName(),
+                log.error("Error sending weekly report for {}: {}", hotel.getName(),
                         e.getMessage());
             }
         }
 
-        log.info("📊 SCHEDULER - Fin envoi rapports hebdomadaires");
+        log.info("SCHEDULER - Finished weekly reports sending");
     }
 
     /**
@@ -107,13 +107,13 @@ public class ReportScheduler {
                     if (nextPayment.isAfter(now) && nextPayment.isBefore(in7Days)) {
                         paymentService.getLastPayment(hotel.getId()).ifPresent(payment -> {
                             emailService.sendPaymentReminder(hotel, payment);
-                            log.info("✅ Rappel paiement envoyé pour: {} (échéance: {})",
+                            log.info("Payment reminder sent for: {} (due date: {})",
                                     hotel.getName(), nextPayment);
                         });
                     }
                 }
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'envoi du rappel paiement pour {}: {}",
+                log.error("Error sending payment reminder for {}: {}",
                         hotel.getName(), e.getMessage());
             }
         }
@@ -127,7 +127,7 @@ public class ReportScheduler {
      */
     @Scheduled(cron = "0 0 10 * * *") // Chaque jour à 10h00
     public void checkOverduePayments() {
-        log.info("⚠️ SCHEDULER - Début vérification paiements en retard");
+        log.info("SCHEDULER - Starting overdue payments check");
 
         paymentService.checkAndMarkOverduePayments();
 
@@ -138,12 +138,12 @@ public class ReportScheduler {
             try {
                 Hotel hotel = payment.getHotel();
                 emailService.sendOverdueNotification(hotel, payment);
-                log.info("⚠️ Notification retard envoyée pour: {}", hotel.getName());
+                log.info("Overdue notification sent for: {}", hotel.getName());
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'envoi de la notification retard: {}", e.getMessage());
+                log.error("Error sending overdue notification: {}", e.getMessage());
             }
         }
 
-        log.info("⚠️ SCHEDULER - Fin vérification paiements en retard ({} trouvés)", overduePayments.size());
+        log.info("SCHEDULER - Finished overdue payments check ({} found)", overduePayments.size());
     }
 }
