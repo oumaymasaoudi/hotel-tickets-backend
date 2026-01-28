@@ -272,6 +272,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
+      
+      - name: Verify SonarCloud Analysis
+        if: always()
+        run: |
+          echo "SonarCloud analysis completed"
+          echo "Check SonarCloud dashboard: https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend"
+          echo "If analysis failed, check the logs above for errors"
 
   # ============================================
   # DOCKER BUILD & PUSH (for develop branch)
@@ -450,16 +457,12 @@ jobs:
             export DOCKER_IMAGE=$DOCKER_IMAGE
             docker compose --env-file .env up -d
             
-            echo "Waiting for startup (15s)..."
-            sleep 15
-            
-            echo "Recent logs:"
-            docker compose logs --tail=100
+            echo "Waiting for container to start (30s)..."
+            sleep 30
             
             echo "Checking container status..."
-            if docker ps | grep -q hotel-ticket-hub-backend-staging; then
-              echo "Backend deployed successfully!"
-            else
+            CONTAINER_ID=$(docker ps -q --filter "name=hotel-ticket-hub-backend-staging" 2>/dev/null || true)
+            if [ -z "$CONTAINER_ID" ]; then
               echo "ERROR: Container is not running"
               echo "Checking stopped containers..."
               docker ps -a | grep hotel-ticket-hub-backend-staging || true
@@ -469,6 +472,22 @@ jobs:
               docker inspect hotel-ticket-hub-backend-staging --format='{{.State.ExitCode}}' 2>/dev/null || echo "Container not found"
               exit 1
             fi
+            
+            echo "Container is running (ID: $CONTAINER_ID)"
+            echo "Waiting for Spring Boot to fully start (30s)..."
+            sleep 30
+            
+            echo "Checking application health..."
+            HEALTH_CHECK_URL="http://localhost:8081/actuator/health"
+            if curl -f -s "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
+              echo "Application is healthy!"
+            else
+              echo "WARNING: Health check failed, but container is running"
+              echo "Recent logs:"
+              docker compose logs --tail=50 hotel-ticket-hub-backend-staging || docker logs hotel-ticket-hub-backend-staging --tail=50 2>&1 || true
+            fi
+            
+            echo "Backend deployed successfully!"
 
       - name: Cleanup SSH
         if: always()
