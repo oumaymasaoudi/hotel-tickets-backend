@@ -3,8 +3,13 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - '**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - '**'
 
 env:
   JAVA_VERSION: '17'
@@ -226,9 +231,8 @@ jobs:
   sonar:
     name: Backend - SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [lint, test, coverage]
+    needs: [lint, test]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    timeout-minutes: 25
     continue-on-error: true
     
     steps:
@@ -244,24 +248,8 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: Download test classes and JaCoCo data
-        uses: actions/download-artifact@v4
-        with:
-          name: test-classes-jacoco
-          path: target
-      
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
-        with:
-          name: jacoco-report
-          path: target/site/jacoco
-          continue-on-error: true
-      
-      - name: Generate JaCoCo report if missing
-        if: failure()
-        run: |
-          echo "Coverage report not found in artifacts, generating it..."
-          mvn -B jacoco:report
+      - name: Run tests with coverage
+        run: mvn -B clean test jacoco:report
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -269,8 +257,6 @@ jobs:
         run: |
           if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
             echo "ERROR: JaCoCo report not found!"
-            echo "Checking target directory structure:"
-            find target -name "*.xml" -o -name "jacoco*" | head -10
             exit 1
           else
             echo "JaCoCo report found: target/site/jacoco/jacoco.xml"
@@ -284,15 +270,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
       
-      - name: Verify SonarCloud Analysis
-        if: always()
-        run: |
-          echo "SonarCloud analysis completed"
-          echo "Check SonarCloud dashboard: https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend"
-          if [ "${{ job.status }}" != "success" ]; then
-            echo "WARNING: SonarCloud analysis completed with warnings or errors"
-            echo "Check the logs above for details"
-          fi
 
   # ============================================
   # DOCKER BUILD & PUSH (for develop branch)
