@@ -9,7 +9,7 @@ TARGET_URL=${1:-"http://localhost:8080"}
 REPORT_DIR="./security-reports"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-echo "🔒 OWASP ZAP Security Scan"
+echo "OWASP ZAP Security Scan"
 echo "Target: $TARGET_URL"
 echo "Report directory: $REPORT_DIR"
 echo ""
@@ -19,11 +19,11 @@ mkdir -p "$REPORT_DIR"
 
 # Vérifier si ZAP est installé
 if ! command -v zap-cli &> /dev/null; then
-    echo "⚠️  zap-cli n'est pas installé. Installation via Docker..."
+    echo "WARNING: zap-cli is not installed. Installing via Docker..."
     
     # Utiliser Docker si disponible
     if command -v docker &> /dev/null; then
-        echo "🐳 Utilisation de OWASP ZAP via Docker..."
+        echo "Using OWASP ZAP via Docker..."
         
         # Démarrer ZAP en mode daemon
         docker run -d --name zap -p 8080:8080 -i owasp/zap2docker-stable zap.sh -daemon \
@@ -48,14 +48,14 @@ if ! command -v zap-cli &> /dev/null; then
         docker stop zap
         docker rm zap
         
-        echo "✅ Scan terminé. Rapports disponibles dans $REPORT_DIR/"
+        echo "Scan completed. Reports available in $REPORT_DIR/"
     else
-        echo "❌ Docker n'est pas installé. Veuillez installer Docker ou zap-cli."
+        echo "ERROR: Docker is not installed. Please install Docker or zap-cli."
         exit 1
     fi
 else
     # Utiliser zap-cli directement
-    echo "🔍 Exécution du scan avec zap-cli..."
+    echo "Running scan with zap-cli..."
     
     zap-cli start
     sleep 5
@@ -70,7 +70,7 @@ else
 fi
 
 echo ""
-echo "📊 Résumé :"
+echo "Summary:"
 echo "  - Rapport HTML : $REPORT_DIR/zap-report-$TIMESTAMP.html"
 echo "  - Rapport JSON : $REPORT_DIR/zap-report-$TIMESTAMP.json"
 

@@ -40,7 +40,7 @@ public class EmailService {
      */
     public void sendPaymentReminder(Hotel hotel, Payment payment) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            log.warn("No email configured for hotel: {}", hotel.getName());
             return;
         }
 
@@ -70,7 +70,7 @@ public class EmailService {
      */
     public void sendReport(Hotel hotel, Map<String, Object> report, String reportType) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            log.warn("No email configured for hotel: {}", hotel.getName());
             return;
         }
 
@@ -106,11 +106,11 @@ public class EmailService {
      */
     public void sendOverdueNotification(Hotel hotel, Payment payment) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("⚠️ Pas d'email configuré pour l'hôtel: {}", hotel.getName());
+            log.warn("No email configured for hotel: {}", hotel.getName());
             return;
         }
 
-        String subject = "⚠️ Paiement en retard - " + hotel.getName();
+        String subject = "Paiement en retard - " + hotel.getName();
         String body = String.format(
             "Bonjour,\n\n" +
             "Votre paiement est en retard depuis le %s.\n\n" +
@@ -118,7 +118,7 @@ public class EmailService {
             "- Hôtel: %s\n" +
             "- Montant dû: %.2f €\n" +
             "- Date d'échéance: %s\n\n" +
-            "⚠️ Votre accès aux services est actuellement suspendu.\n" +
+            "Votre accès aux services est actuellement suspendu.\n" +
             "Veuillez régulariser votre paiement dès que possible pour rétablir l'accès.\n\n" +
             "Cordialement,\n" +
             "L'équipe Hotel Ticket Hub",
@@ -137,7 +137,7 @@ public class EmailService {
      */
     private void sendEmail(String to, String subject, String body) {
         if (!emailEnabled) {
-            log.info("📧 EMAIL (désactivé) - Destinataire: {}, Subject: {}", to, subject);
+            log.info("EMAIL (disabled) - To: {}, Subject: {}", to, subject);
             return;
         }
 
@@ -150,18 +150,18 @@ public class EmailService {
                 message.setText(body);
                 
                 mailSender.get().send(message);
-                log.info("✅ EMAIL envoyé avec succès à: {}", to);
+                log.info("EMAIL sent successfully to: {}", to);
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'envoi de l'email à {}: {}", to, e.getMessage(), e);
+                log.error("Error sending email to {}: {}", to, e.getMessage(), e);
                 // Fallback: log l'email même en cas d'erreur
-                log.info("📧 EMAIL (fallback) - Destinataire: {}, Subject: {}", to, subject);
-                log.info("📧 Body: {}", body);
+                log.info("EMAIL (fallback) - To: {}, Subject: {}", to, subject);
+                log.info("Body: {}", body);
             }
         } else {
             // Fallback: log l'email si la configuration n'est pas disponible
-            log.info("📧 EMAIL (mode développement) - Destinataire: {}, Subject: {}", to, subject);
-            log.info("📧 Body: {}", body);
-            log.info("💡 Pour activer l'envoi d'emails, configurez spring.mail.* dans application.properties");
+            log.info("EMAIL (development mode) - To: {}, Subject: {}", to, subject);
+            log.info("Body: {}", body);
+            log.info("To enable email sending, configure spring.mail.* in application.properties");
         }
     }
 }

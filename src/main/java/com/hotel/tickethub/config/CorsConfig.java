@@ -17,8 +17,7 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        // ✅ Spécifier les origines explicitement (pas de wildcard avec
-                        // allowCredentials)
+                        // Specify origins explicitly (no wildcard with allowCredentials)
                         .allowedOrigins(
                                 "http://localhost:5173",
                                 "http://localhost:3000",
