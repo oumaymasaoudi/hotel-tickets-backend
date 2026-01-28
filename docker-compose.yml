@@ -29,6 +29,8 @@ services:
       - SPRING_MAIL_PORT=${SPRING_MAIL_PORT}
       - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME}
       - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD}
+      # Désactiver le health check mail si non configuré
+      - MANAGEMENT_HEALTH_MAIL_ENABLED=false
       # Limites de mémoire Java (ajustées pour t3.small - 2 Go RAM)
       # Architecture : VM Backend = application Spring Boot + Node Exporter
       # Monitoring (Prometheus, Grafana) = sur VM Ansible séparée
