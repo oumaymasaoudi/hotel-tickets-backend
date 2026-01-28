@@ -283,9 +283,11 @@ jobs:
             -Dsonar.java.binaries=target/classes
             -Dsonar.java.test.binaries=target/test-classes
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            -Dsonar.scanner.force-deprecated-java-version=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_SCANNER_OPTS: -Xmx1024m
       
       - name: Verify SonarCloud Analysis Sent
         if: always()
@@ -426,10 +428,18 @@ jobs:
           source: "docker-compose.yml"
           target: "/opt/hotel-ticket-hub-backend-staging/"
           strip_components: 0
-          timeout: 120s  # Augmenté pour gérer les connexions lentes
+          timeout: 120s
           command_timeout: 60s
-          debug: true  # Activé pour diagnostiquer les problèmes
+          debug: false
           use_insecure_cipher: false
+        continue-on-error: true
+      
+      - name: Verify docker-compose file copied
+        if: failure()
+        run: |
+          echo "SCP copy failed, verifying SSH connection..."
+          ssh -F ~/.ssh/config backend-staging "ls -la /opt/hotel-ticket-hub-backend-staging/docker-compose.yml || echo 'File not found'"
+          exit 1
 
       - name: Deploy to staging VM
         uses: appleboy/ssh-action@v1.0.3
