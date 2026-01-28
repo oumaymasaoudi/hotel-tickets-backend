@@ -753,26 +753,73 @@ jobs:
             echo "Checking disk space..."
             df -h / | tail -1
             
-            echo "Cleaning up Docker disk space..."
-            # Nettoyer les images non utilisées (sauf celles en cours d'utilisation)
-            docker image prune -af --filter "until=24h" || true
+            echo "Aggressive Docker disk space cleanup..."
             
-            # Nettoyer les conteneurs arrêtés
-            docker container prune -f || true
+            # Arrêter tous les conteneurs en cours d'exécution (sauf ceux critiques)
+            echo "Stopping all running containers..."
+            docker ps -q | xargs -r docker stop 2>/dev/null || true
             
-            # Nettoyer les volumes non utilisés (attention: peut supprimer des données)
-            docker volume prune -f || true
+            # Supprimer tous les conteneurs arrêtés
+            echo "Removing all stopped containers..."
+            docker container prune -af || true
             
-            # Nettoyer le système Docker (images, conteneurs, réseaux)
-            # Note: --filter "until=24h" n'est pas supporté avec --volumes, donc on fait séparément
-            docker system prune -af --filter "until=24h" || true
-            # Nettoyer les volumes séparément si nécessaire
-            docker volume prune -f || true
+            # Supprimer toutes les images non utilisées (sans filtre de temps pour libérer plus d'espace)
+            echo "Removing unused images..."
+            docker image prune -af || true
+            
+            # Nettoyer le build cache
+            echo "Cleaning build cache..."
+            docker builder prune -af || true
+            
+            # Nettoyer les logs Docker (peuvent prendre beaucoup d'espace)
+            echo "Cleaning Docker logs..."
+            find /var/lib/docker/containers/ -type f -name "*.log" -delete 2>/dev/null || true
+            journalctl --vacuum-time=1d 2>/dev/null || true
+            
+            # Nettoyer les volumes non utilisés
+            echo "Removing unused volumes..."
+            docker volume prune -af || true
+            
+            # Nettoyer les réseaux non utilisés
+            echo "Removing unused networks..."
+            docker network prune -f || true
+            
+            # Nettoyage système complet (sans filtre de temps)
+            echo "Full system prune..."
+            docker system prune -af --volumes || true
+            
+            # Vérifier l'espace utilisé par Docker
+            echo "Docker disk usage:"
+            docker system df || true
             
             echo "Disk space after cleanup:"
             df -h / | tail -1
             
-            echo "Pulling Docker images..."
+            # Si le disque est toujours plein, essayer de nettoyer les snapshots containerd
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            if [ "$DISK_USAGE" -gt 90 ]; then
+              echo "WARNING: Disk still above 90%, cleaning containerd snapshots..."
+              # Nettoyer les snapshots containerd (nécessite d'arrêter Docker, mais on essaie quand même)
+              systemctl stop docker 2>/dev/null || true
+              rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/* 2>/dev/null || true
+              systemctl start docker 2>/dev/null || true
+              sleep 5
+              echo "Final disk space:"
+              df -h / | tail -1
+            fi
+            
+            # Vérifier l'espace disque avant de pull les images
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            if [ "$DISK_USAGE" -gt 95 ]; then
+              echo "ERROR: Disk usage is still above 95% ($DISK_USAGE%), cannot pull images safely"
+              echo "Current disk usage:"
+              df -h /
+              echo "Docker disk usage:"
+              docker system df || true
+              exit 1
+            fi
+            
+            echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
             docker compose -f docker-compose.monitoring.yml pull
             
             echo "Starting monitoring stack..."
