@@ -232,8 +232,7 @@ jobs:
     name: Backend - SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [lint, test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    continue-on-error: true
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) || github.event_name == 'pull_request'
     
     steps:
       - name: Checkout code
@@ -263,12 +262,55 @@ jobs:
             ls -lh target/site/jacoco/jacoco.xml
           fi
       
+      - name: Verify Java binaries exist
+        run: |
+          if [ ! -d "target/classes" ]; then
+            echo "ERROR: target/classes directory not found!"
+            echo "Compiling classes..."
+            mvn -B compile
+          else
+            echo "Java binaries found: target/classes"
+            ls -lh target/classes | head -10
+          fi
+      
       - name: SonarCloud Scan
+        id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend
+            -Dsonar.organization=oumaymasaoudi
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            -Dsonar.java.binaries=target/classes
+            -Dsonar.java.test.binaries=target/test-classes
+            -Dsonar.sources=src/main/java
+            -Dsonar.tests=src/test/java
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        continue-on-error: true
+      
+      - name: Verify SonarCloud Analysis Sent
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "SonarCloud Analysis Verification"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Project Key: oumaymasaoudi_hotel-tickets-backend"
+          echo "Organization: oumaymasaoudi"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "Check SonarCloud dashboard:"
+          echo "https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend&branch=${{ github.ref_name }}"
+          echo ""
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "Status: Analysis sent successfully to SonarCloud"
+            echo "The analysis should appear in SonarCloud within a few minutes"
+          else
+            echo "Status: Analysis may have failed - check logs above"
+            echo "Exit code: ${{ steps.sonarcloud-scan.outcome }}"
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
 
   # ============================================
