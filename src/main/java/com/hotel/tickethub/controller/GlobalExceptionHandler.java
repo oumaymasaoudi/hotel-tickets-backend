@@ -9,6 +9,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
+import org.springframework.web.context.request.WebRequest;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,8 +18,9 @@ import java.util.stream.Collectors;
 
 /**
  * Global exception handler to return JSON error messages with appropriate HTTP status codes
+ * Excludes Actuator endpoints to allow Spring Boot Actuator to handle its own errors
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.hotel.tickethub.controller")
 public class GlobalExceptionHandler {
 
     private static final String ERROR_KEY = "error";
@@ -90,7 +93,16 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
+    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e, WebRequest request) {
+        // Exclude Actuator endpoints from global exception handling
+        if (request instanceof ServletWebRequest) {
+            String path = ((ServletWebRequest) request).getRequest().getRequestURI();
+            if (path != null && path.startsWith("/actuator")) {
+                // Let Spring Boot Actuator handle its own errors
+                throw e;
+            }
+        }
+        
         Map<String, Object> error = new HashMap<>();
         String errorMessage = e.getMessage();
 
@@ -149,7 +161,16 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(Exception e) {
+    public ResponseEntity<Map<String, Object>> handleGenericException(Exception e, WebRequest request) {
+        // Exclude Actuator endpoints from global exception handling
+        if (request instanceof ServletWebRequest) {
+            String path = ((ServletWebRequest) request).getRequest().getRequestURI();
+            if (path != null && path.startsWith("/actuator")) {
+                // Let Spring Boot Actuator handle its own errors
+                throw new RuntimeException(e);
+            }
+        }
+        
         Map<String, Object> error = new HashMap<>();
         error.put(ERROR_KEY, "Erreur serveur");
         error.put(MESSAGE_KEY, "Une erreur inattendue est survenue. Veuillez réessayer plus tard.");
