@@ -705,30 +705,61 @@ jobs:
               fi
             fi
             
-            echo "Waiting for startup (15s)..."
-            sleep 15
+            echo "Waiting for services to start (30s)..."
+            sleep 30
             
             echo "Container status:"
             docker compose -f docker-compose.monitoring.yml ps
             
             echo "Checking services..."
+            
+            # Vérifier que les conteneurs sont en cours d'exécution
+            echo "Verifying containers are running..."
+            
             # Vérifier Prometheus
             if docker ps | grep -q prometheus; then
-              echo "Prometheus is running"
+              PROMETHEUS_STATUS=$(docker ps --filter "name=prometheus" --format "{{.Status}}")
+              echo "Prometheus is running: $PROMETHEUS_STATUS"
             else
-              echo "ERROR: Prometheus is not started"
-              docker compose -f docker-compose.monitoring.yml logs prometheus | tail -20
+              echo "ERROR: Prometheus container is not running"
+              docker compose -f docker-compose.monitoring.yml logs prometheus | tail -30
               exit 1
             fi
             
-            # Vérifier Grafana
+            # Vérifier Grafana (peut prendre plus de temps pour le health check)
             if docker ps | grep -q grafana; then
-              echo "Grafana is running"
+              GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
+              echo "Grafana is running: $GRAFANA_STATUS"
+              
+              # Si Grafana est encore en "health: starting", attendre un peu plus
+              if echo "$GRAFANA_STATUS" | grep -q "health: starting"; then
+                echo "Grafana is still starting, waiting additional 30s..."
+                sleep 30
+                GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
+                echo "Grafana status after wait: $GRAFANA_STATUS"
+              fi
+              
+              # Vérifier que Grafana est toujours en cours d'exécution après l'attente
+              if ! docker ps | grep -q grafana; then
+                echo "ERROR: Grafana container stopped after startup"
+                docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
+                exit 1
+              fi
             else
-              echo "ERROR: Grafana is not started"
-              docker compose -f docker-compose.monitoring.yml logs grafana | tail -20
+              echo "ERROR: Grafana container is not running"
+              docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
               exit 1
             fi
+            
+            # Vérifier les autres services essentiels
+            for service in alertmanager node-exporter cadvisor; do
+              if docker ps | grep -q "$service"; then
+                SERVICE_STATUS=$(docker ps --filter "name=$service" --format "{{.Status}}")
+                echo "$service is running: $SERVICE_STATUS"
+              else
+                echo "WARNING: $service container is not running (non-critical)"
+              fi
+            done
             
             echo "Recent logs (last 10 lines):"
             docker compose -f docker-compose.monitoring.yml logs --tail=10
