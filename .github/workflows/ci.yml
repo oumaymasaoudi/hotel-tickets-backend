@@ -627,19 +627,67 @@ jobs:
           }
           echo "SSH connection OK"
 
-      - name: Copy monitoring files to VM
-        uses: appleboy/scp-action@v0.1.7
+      - name: Prepare monitoring directory
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
           key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
-          source: "monitoring/"
-          target: "${{ env.MONITORING_DIR }}/"
-          strip_components: 1  # Enlever le préfixe "monitoring/"
-          timeout: 120s
-          command_timeout: 60s
-          debug: false
-          use_insecure_cipher: false
+          timeout: 60s
+          command_timeout: 30s
+          script: |
+            mkdir -p ${{ env.MONITORING_DIR }}
+            chmod 755 ${{ env.MONITORING_DIR }}
+      
+      - name: Copy monitoring files to VM
+        run: |
+          if [ ! -d "monitoring" ]; then
+            echo "ERROR: monitoring directory not found in workspace"
+            exit 1
+          fi
+          echo "Copying monitoring files via SCP..."
+          if scp -F ~/.ssh/config \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              -r monitoring/* \
+              monitoring-vm:${{ env.MONITORING_DIR }}/; then
+            echo "Files copied successfully via SCP"
+          else
+            echo "SCP failed, trying alternative method via SSH..."
+            cd monitoring
+            for file in $(find . -type f); do
+              target_dir="${{ env.MONITORING_DIR }}/$(dirname "$file")"
+              ssh -F ~/.ssh/config \
+                  -o StrictHostKeyChecking=no \
+                  -o ConnectTimeout=10 \
+                  monitoring-vm "mkdir -p $target_dir" || true
+              cat "$file" | ssh -F ~/.ssh/config \
+                  -o StrictHostKeyChecking=no \
+                  -o ConnectTimeout=10 \
+                  monitoring-vm "cat > ${{ env.MONITORING_DIR }}/$file" || {
+                echo "ERROR: Failed to copy $file"
+                exit 1
+              }
+            done
+            echo "Files copied successfully via SSH"
+          fi
+      
+      - name: Verify monitoring files copied
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          timeout: 30s
+          command_timeout: 10s
+          script: |
+            if [ ! -f "${{ env.MONITORING_DIR }}/docker-compose.monitoring.yml" ]; then
+              echo "ERROR: docker-compose.monitoring.yml not found after copy attempt"
+              exit 1
+            else
+              echo "Monitoring files successfully copied"
+              ls -lh ${{ env.MONITORING_DIR }}/
+            fi
 
       - name: Deploy Monitoring Stack
         uses: appleboy/ssh-action@v1.0.3
