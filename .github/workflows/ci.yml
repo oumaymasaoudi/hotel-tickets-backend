@@ -412,27 +412,60 @@ jobs:
           }
           echo "SSH connection OK"
 
-      - name: Copy docker-compose to staging
-        uses: appleboy/scp-action@v0.1.7
+      - name: Prepare staging directory
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          source: "docker-compose.yml"
-          target: "/opt/hotel-ticket-hub-backend-staging/"
-          strip_components: 0
-          timeout: 120s
-          command_timeout: 60s
-          debug: false
-          use_insecure_cipher: false
-        continue-on-error: true
+          timeout: 60s
+          command_timeout: 30s
+          script: |
+            mkdir -p /opt/hotel-ticket-hub-backend-staging
+            chmod 755 /opt/hotel-ticket-hub-backend-staging
+      
+      - name: Copy docker-compose to staging
+        run: |
+          if [ ! -f "docker-compose.yml" ]; then
+            echo "ERROR: docker-compose.yml not found in workspace"
+            exit 1
+          fi
+          echo "Copying docker-compose.yml via SCP..."
+          if scp -F ~/.ssh/config \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              docker-compose.yml \
+              backend-staging:/opt/hotel-ticket-hub-backend-staging/docker-compose.yml; then
+            echo "File copied successfully via SCP"
+          else
+            echo "SCP failed, trying alternative method via SSH..."
+            if cat docker-compose.yml | ssh -F ~/.ssh/config \
+                -o StrictHostKeyChecking=no \
+                -o ConnectTimeout=10 \
+                backend-staging "cat > /opt/hotel-ticket-hub-backend-staging/docker-compose.yml"; then
+              echo "File copied successfully via SSH"
+            else
+              echo "ERROR: Both SCP and SSH copy methods failed"
+              exit 1
+            fi
+          fi
       
       - name: Verify docker-compose file copied
-        if: failure()
-        run: |
-          echo "SCP copy failed, verifying SSH connection..."
-          ssh -F ~/.ssh/config backend-staging "ls -la /opt/hotel-ticket-hub-backend-staging/docker-compose.yml || echo 'File not found'"
-          exit 1
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          timeout: 30s
+          command_timeout: 10s
+          script: |
+            if [ ! -f "/opt/hotel-ticket-hub-backend-staging/docker-compose.yml" ]; then
+              echo "ERROR: docker-compose.yml not found after copy attempt"
+              exit 1
+            else
+              echo "docker-compose.yml successfully copied"
+              ls -lh /opt/hotel-ticket-hub-backend-staging/docker-compose.yml
+            fi
 
       - name: Deploy to staging VM
         uses: appleboy/ssh-action@v1.0.3
