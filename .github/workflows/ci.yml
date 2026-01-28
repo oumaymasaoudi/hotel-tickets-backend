@@ -662,8 +662,11 @@ jobs:
             # Nettoyer les volumes non utilisés (attention: peut supprimer des données)
             docker volume prune -f || true
             
-            # Nettoyer le système Docker (images, conteneurs, réseaux, volumes)
-            docker system prune -af --volumes --filter "until=24h" || true
+            # Nettoyer le système Docker (images, conteneurs, réseaux)
+            # Note: --filter "until=24h" n'est pas supporté avec --volumes, donc on fait séparément
+            docker system prune -af --filter "until=24h" || true
+            # Nettoyer les volumes séparément si nécessaire
+            docker volume prune -f || true
             
             echo "Disk space after cleanup:"
             df -h / | tail -1
@@ -727,9 +730,11 @@ jobs:
             fi
             
             # Vérifier Grafana (peut prendre plus de temps pour le health check)
-            if docker ps | grep -q grafana; then
+            GRAFANA_RUNNING=$(docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana && echo "yes" || echo "no")
+            
+            if [ "$GRAFANA_RUNNING" = "yes" ]; then
               GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
-              echo "Grafana is running: $GRAFANA_STATUS"
+              echo "Grafana container found: $GRAFANA_STATUS"
               
               # Si Grafana est encore en "health: starting", attendre un peu plus
               if echo "$GRAFANA_STATUS" | grep -q "health: starting"; then
@@ -737,16 +742,21 @@ jobs:
                 sleep 30
                 GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
                 echo "Grafana status after wait: $GRAFANA_STATUS"
+                
+                # Vérifier à nouveau si Grafana est toujours en cours d'exécution
+                if ! docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana; then
+                  echo "ERROR: Grafana container stopped during startup"
+                  docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
+                  exit 1
+                fi
               fi
               
-              # Vérifier que Grafana est toujours en cours d'exécution après l'attente
-              if ! docker ps | grep -q grafana; then
-                echo "ERROR: Grafana container stopped after startup"
-                docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
-                exit 1
-              fi
+              echo "Grafana is running successfully"
             else
               echo "ERROR: Grafana container is not running"
+              echo "Checking all containers:"
+              docker ps -a | grep grafana || echo "No grafana container found"
+              echo "Grafana logs:"
               docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
               exit 1
             fi
