@@ -3,13 +3,8 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
-    paths:
-      - '**'
-      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - '**'
 
 env:
   JAVA_VERSION: '17'
@@ -231,7 +226,7 @@ jobs:
   sonar:
     name: Backend - SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, coverage]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     timeout-minutes: 25
     continue-on-error: true
@@ -249,8 +244,24 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       
-      - name: Run tests with coverage
-        run: mvn -B clean test jacoco:report
+      - name: Download test classes and JaCoCo data
+        uses: actions/download-artifact@v4
+        with:
+          name: test-classes-jacoco
+          path: target
+      
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+          continue-on-error: true
+      
+      - name: Generate JaCoCo report if missing
+        if: failure()
+        run: |
+          echo "Coverage report not found in artifacts, generating it..."
+          mvn -B jacoco:report
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -278,7 +289,10 @@ jobs:
         run: |
           echo "SonarCloud analysis completed"
           echo "Check SonarCloud dashboard: https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend"
-          echo "If analysis failed, check the logs above for errors"
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "WARNING: SonarCloud analysis completed with warnings or errors"
+            echo "Check the logs above for details"
+          fi
 
   # ============================================
   # DOCKER BUILD & PUSH (for develop branch)
@@ -375,13 +389,13 @@ jobs:
 
       - name: Test SSH Connection
         run: |
-          echo "🔍 Test de connexion SSH..."
+          echo "Testing SSH connection..."
           timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no backend-staging "echo 'SSH connection successful'" || {
             echo "ERROR: SSH connection failed"
-            echo "Vérifiez que :"
-            echo "  - La VM est accessible depuis GitHub Actions"
-            echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
-            echo "  - Les secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY sont corrects"
+            echo "Verify that:"
+            echo "  - The VM is accessible from GitHub Actions"
+            echo "  - The AWS Security Group allows connections from GitHub"
+            echo "  - The secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY are correct"
             exit 1
           }
           echo "SSH connection OK"
@@ -523,7 +537,7 @@ jobs:
             exit 1
           fi
           echo "Monitoring directory found"
-          echo "📁 Files to deploy:"
+          echo "Files to deploy:"
           find monitoring -type f -name "*.yml" -o -name "*.yaml" -o -name "*.conf" | head -20
 
       - name: Setup SSH Config
@@ -549,13 +563,13 @@ jobs:
 
       - name: Test SSH Connection
         run: |
-          echo "🔍 Test de connexion SSH vers la VM Monitoring..."
+          echo "Testing SSH connection to Monitoring VM..."
           timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no monitoring-vm "echo 'SSH connection successful'" || {
             echo "ERROR: SSH connection failed"
-            echo "Vérifiez que :"
-            echo "  - La VM Monitoring est accessible depuis GitHub Actions"
-            echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
-            echo "  - Les secrets MONITORING_HOST, MONITORING_USER, MONITORING_SSH_PRIVATE_KEY sont corrects"
+            echo "Verify that:"
+            echo "  - The Monitoring VM is accessible from GitHub Actions"
+            echo "  - The AWS Security Group allows connections from GitHub"
+            echo "  - The secrets MONITORING_HOST, MONITORING_USER, MONITORING_SSH_PRIVATE_KEY are correct"
             exit 1
           }
           echo "SSH connection OK"
@@ -588,7 +602,7 @@ jobs:
             set -euo pipefail
             cd ${{ env.MONITORING_DIR }}
             
-            echo "🔍 Vérification des fichiers..."
+            echo "Verifying configuration files..."
             if [ ! -f "docker-compose.monitoring.yml" ]; then
               echo "ERROR: docker-compose.monitoring.yml not found!"
               exit 1
@@ -720,7 +734,7 @@ jobs:
             docker compose -f docker-compose.monitoring.yml logs --tail=10
             
             echo "Monitoring stack deployed successfully!"
-            echo "🔗 Prometheus devrait maintenant scraper le backend sur ${{ secrets.STAGING_HOST }}:8081"
+            echo "Prometheus should now scrape the backend on ${{ secrets.STAGING_HOST }}:8081"
 
       - name: Cleanup SSH
         if: always()
@@ -733,7 +747,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [build, test, sonar]
+    needs: [build, test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: write
