@@ -228,8 +228,6 @@ jobs:
   # ============================================
   # SONARQUBE ANALYSIS
   # ============================================
-  # SONARQUBE ANALYSIS
-  # ============================================
   sonar:
     name: Backend - SonarQube Analysis
     runs-on: ubuntu-latest
@@ -264,7 +262,7 @@ jobs:
             find target -name "*.xml" -o -name "jacoco*" | head -10
             exit 1
           else
-            echo "✅ JaCoCo report found: target/site/jacoco/jacoco.xml"
+            echo "JaCoCo report found: target/site/jacoco/jacoco.xml"
             ls -lh target/site/jacoco/jacoco.xml
           fi
       
@@ -345,7 +343,7 @@ jobs:
             echo "ERROR: docker-compose.yml not found!"
             exit 1
           fi
-          echo "✅ docker-compose.yml found ($(du -h docker-compose.yml | cut -f1))"
+          echo "docker-compose.yml found ($(du -h docker-compose.yml | cut -f1))"
 
       - name: Setup SSH Config
         run: |
@@ -372,14 +370,14 @@ jobs:
         run: |
           echo "🔍 Test de connexion SSH..."
           timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no backend-staging "echo 'SSH connection successful'" || {
-            echo "❌ Échec de la connexion SSH"
+            echo "ERROR: SSH connection failed"
             echo "Vérifiez que :"
             echo "  - La VM est accessible depuis GitHub Actions"
             echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
             echo "  - Les secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY sont corrects"
             exit 1
           }
-          echo "✅ Connexion SSH OK"
+          echo "SSH connection OK"
 
       - name: Copy docker-compose to staging
         uses: appleboy/scp-action@v0.1.7
@@ -409,7 +407,7 @@ jobs:
             set -euo pipefail  # Mode strict : erreur si variable non définie
             cd /opt/hotel-ticket-hub-backend-staging
             
-            echo "🛑 Arrêt des services existants..."
+            echo "Stopping existing services..."
             # Stop old systemd service if it exists
             sudo systemctl stop hotel-ticket-hub-backend-staging 2>/dev/null || true
             sudo systemctl disable hotel-ticket-hub-backend-staging 2>/dev/null || true
@@ -435,34 +433,40 @@ jobs:
             # Stop and remove old docker-compose containers
             docker compose down 2>/dev/null || true
             
-            echo "✅ Vérification du fichier .env..."
+            echo "Checking .env file..."
             if [ ! -f .env ]; then
               echo "ERROR: .env file not found! Please create it first."
               exit 1
             fi
             
-            echo "🔐 Connexion à GitHub Container Registry..."
+            echo "Connecting to GitHub Container Registry..."
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            echo "📥 Pull de l'image Docker..."
+            echo "Pulling Docker image..."
             export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:develop
             docker pull $DOCKER_IMAGE || docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
             
-            echo "🚀 Démarrage du conteneur..."
+            echo "Starting container..."
             export DOCKER_IMAGE=$DOCKER_IMAGE
             docker compose --env-file .env up -d
             
-            echo "⏳ Attente du démarrage (10s)..."
-            sleep 10
+            echo "Waiting for startup (15s)..."
+            sleep 15
             
-            echo "📋 Logs récents:"
-            docker compose logs --tail=50
+            echo "Recent logs:"
+            docker compose logs --tail=100
             
-            echo "✅ Vérification du conteneur..."
+            echo "Checking container status..."
             if docker ps | grep -q hotel-ticket-hub-backend-staging; then
-              echo "✅ Backend déployé avec succès!"
+              echo "Backend deployed successfully!"
             else
-              echo "❌ Le conteneur n'est pas en cours d'exécution"
+              echo "ERROR: Container is not running"
+              echo "Checking stopped containers..."
+              docker ps -a | grep hotel-ticket-hub-backend-staging || true
+              echo "Container logs (last 100 lines):"
+              docker compose logs --tail=100 hotel-ticket-hub-backend-staging || docker logs hotel-ticket-hub-backend-staging --tail=100 2>&1 || true
+              echo "Exit code:"
+              docker inspect hotel-ticket-hub-backend-staging --format='{{.State.ExitCode}}' 2>/dev/null || echo "Container not found"
               exit 1
             fi
 
@@ -499,7 +503,7 @@ jobs:
             echo "ERROR: monitoring directory not found!"
             exit 1
           fi
-          echo "✅ Monitoring directory found"
+          echo "Monitoring directory found"
           echo "📁 Files to deploy:"
           find monitoring -type f -name "*.yml" -o -name "*.yaml" -o -name "*.conf" | head -20
 
@@ -528,14 +532,14 @@ jobs:
         run: |
           echo "🔍 Test de connexion SSH vers la VM Monitoring..."
           timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no monitoring-vm "echo 'SSH connection successful'" || {
-            echo "❌ Échec de la connexion SSH"
+            echo "ERROR: SSH connection failed"
             echo "Vérifiez que :"
             echo "  - La VM Monitoring est accessible depuis GitHub Actions"
             echo "  - Le Security Group AWS autorise les connexions depuis GitHub"
             echo "  - Les secrets MONITORING_HOST, MONITORING_USER, MONITORING_SSH_PRIVATE_KEY sont corrects"
             exit 1
           }
-          echo "✅ Connexion SSH OK"
+          echo "SSH connection OK"
 
       - name: Copy monitoring files to VM
         uses: appleboy/scp-action@v0.1.7
@@ -574,13 +578,13 @@ jobs:
               echo "ERROR: prometheus/prometheus.yml not found!"
               exit 1
             fi
-            echo "✅ Fichiers de configuration trouvés"
+            echo "Configuration files found"
             
-            echo "🛑 Arrêt des services existants..."
+            echo "Stopping existing services..."
             docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
             
             # Nettoyer complètement : arrêter tous les conteneurs monitoring
-            echo "🔧 Nettoyage des conteneurs monitoring..."
+            echo "Cleaning up monitoring containers..."
             for container in prometheus grafana alertmanager node-exporter cadvisor; do
               docker ps -a --filter "name=$container" --format "{{.ID}}" | while read id; do
                 [ -n "$id" ] && docker rm -f "$id" 2>/dev/null || true
@@ -588,34 +592,34 @@ jobs:
             done
             
             # Supprimer le réseau existant (forcer si nécessaire)
-            echo "🔧 Suppression du réseau monitoring-network..."
+            echo "Removing monitoring-network..."
             # Essayer plusieurs fois avec différentes méthodes
             for i in 1 2 3; do
               if docker network ls | grep -q monitoring-network; then
-                echo "  Tentative $i: Suppression du réseau..."
+                echo "  Attempt $i: Removing network..."
                 docker network rm monitoring-network 2>/dev/null && break || {
                   if [ $i -eq 1 ]; then
-                    echo "  ⚠️  Le réseau est encore utilisé, nettoyage des réseaux non utilisés..."
+                    echo "  WARNING: Network still in use, cleaning unused networks..."
                     docker network prune -f
                     sleep 2
                   elif [ $i -eq 2 ]; then
-                    echo "  ⚠️  Réessai après nettoyage..."
+                    echo "  Retrying after cleanup..."
                     sleep 2
                   else
-                    echo "  ⚠️  Impossible de supprimer le réseau, on continue quand même..."
+                    echo "  WARNING: Cannot remove network, continuing anyway..."
                   fi
                 }
               else
-                echo "  ✅ Le réseau n'existe plus"
+                echo "  Network removed"
                 break
               fi
             done
             sleep 2
             
-            echo "💾 Vérification de l'espace disque..."
+            echo "Checking disk space..."
             df -h / | tail -1
             
-            echo "🧹 Nettoyage de l'espace disque Docker..."
+            echo "Cleaning up Docker disk space..."
             # Nettoyer les images non utilisées (sauf celles en cours d'utilisation)
             docker image prune -af --filter "until=24h" || true
             
@@ -628,13 +632,13 @@ jobs:
             # Nettoyer le système Docker (images, conteneurs, réseaux, volumes)
             docker system prune -af --volumes --filter "until=24h" || true
             
-            echo "💾 Espace disque après nettoyage:"
+            echo "Disk space after cleanup:"
             df -h / | tail -1
             
-            echo "📥 Pull des images Docker..."
+            echo "Pulling Docker images..."
             docker compose -f docker-compose.monitoring.yml pull
             
-            echo "🚀 Démarrage de la stack de monitoring..."
+            echo "Starting monitoring stack..."
             # Démarrer avec gestion d'erreur pour le réseau
             set +e  # Ne pas arrêter sur les erreurs
             docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
@@ -642,10 +646,10 @@ jobs:
             set -e  # Réactiver l'arrêt sur erreur
             
             if [ $COMPOSE_EXIT_CODE -ne 0 ]; then
-              echo "⚠️  Erreur détectée, vérification du réseau..."
+              echo "WARNING: Error detected, checking network..."
               # Si l'erreur est liée au réseau, supprimer le réseau et réessayer
               if docker network ls | grep -q monitoring-network; then
-                echo "🔧 Suppression forcée du réseau problématique..."
+                echo "Force removing problematic network..."
                 # Arrêter tous les conteneurs qui utilisent ce réseau
                 CONTAINER_IDS=$(docker ps --filter network=monitoring-network -q 2>/dev/null || true)
                 if [ -n "$CONTAINER_IDS" ]; then
@@ -659,44 +663,44 @@ jobs:
                 # Supprimer le réseau
                 docker network rm monitoring-network 2>/dev/null || docker network prune -f
                 sleep 3
-                echo "🔄 Nouvelle tentative de démarrage..."
+                echo "Retrying startup..."
                 docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
               else
-                echo "❌ Erreur non liée au réseau, voir les logs"
+                echo "ERROR: Non-network related error, see logs"
                 docker compose -f docker-compose.monitoring.yml logs
                 exit 1
               fi
             fi
             
-            echo "⏳ Attente du démarrage (15s)..."
+            echo "Waiting for startup (15s)..."
             sleep 15
             
-            echo "📋 Statut des conteneurs:"
+            echo "Container status:"
             docker compose -f docker-compose.monitoring.yml ps
             
-            echo "✅ Vérification des services..."
+            echo "Checking services..."
             # Vérifier Prometheus
             if docker ps | grep -q prometheus; then
-              echo "✅ Prometheus est en cours d'exécution"
+              echo "Prometheus is running"
             else
-              echo "❌ Prometheus n'est pas démarré"
+              echo "ERROR: Prometheus is not started"
               docker compose -f docker-compose.monitoring.yml logs prometheus | tail -20
               exit 1
             fi
             
             # Vérifier Grafana
             if docker ps | grep -q grafana; then
-              echo "✅ Grafana est en cours d'exécution"
+              echo "Grafana is running"
             else
-              echo "❌ Grafana n'est pas démarré"
+              echo "ERROR: Grafana is not started"
               docker compose -f docker-compose.monitoring.yml logs grafana | tail -20
               exit 1
             fi
             
-            echo "📋 Logs récents (dernières 10 lignes):"
+            echo "Recent logs (last 10 lines):"
             docker compose -f docker-compose.monitoring.yml logs --tail=10
             
-            echo "✅ Monitoring stack déployé avec succès!"
+            echo "Monitoring stack deployed successfully!"
             echo "🔗 Prometheus devrait maintenant scraper le backend sur ${{ secrets.STAGING_HOST }}:8081"
 
       - name: Cleanup SSH
