@@ -19,12 +19,15 @@ import java.util.Optional;
  * Règle 4 & 14: Rappels paiement et rapports automatiques
  * 
  * Utilise Spring Mail pour l'envoi d'emails.
- * En développement, si la configuration email n'est pas disponible, les emails sont loggés.
+ * En développement, si la configuration email n'est pas disponible, les emails
+ * sont loggés.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
+
+    private static final String LOG_NO_EMAIL_CONFIGURED = "No email configured for hotel: {}";
 
     private final Optional<JavaMailSender> mailSender;
 
@@ -40,26 +43,25 @@ public class EmailService {
      */
     public void sendPaymentReminder(Hotel hotel, Payment payment) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("No email configured for hotel: {}", hotel.getName());
+            log.warn(LOG_NO_EMAIL_CONFIGURED, hotel.getName());
             return;
         }
 
         String subject = "Rappel de paiement - " + hotel.getName();
         String body = String.format(
-            "Bonjour,\n\n" +
-            "Ceci est un rappel que votre prochain paiement est prévu le %s.\n\n" +
-            "Détails:\n" +
-            "- Hôtel: %s\n" +
-            "- Montant: %.2f €\n" +
-            "- Date d'échéance: %s\n\n" +
-            "Veuillez régulariser votre paiement pour continuer à bénéficier de nos services.\n\n" +
-            "Cordialement,\n" +
-            "L'équipe Hotel Ticket Hub",
-            payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-            hotel.getName(),
-            payment.getAmount().doubleValue(),
-            payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        );
+                "Bonjour,\n\n" +
+                        "Ceci est un rappel que votre prochain paiement est prévu le %s.\n\n" +
+                        "Détails:\n" +
+                        "- Hôtel: %s\n" +
+                        "- Montant: %.2f €\n" +
+                        "- Date d'échéance: %s\n\n" +
+                        "Veuillez régulariser votre paiement pour continuer à bénéficier de nos services.\n\n" +
+                        "Cordialement,\n" +
+                        "L'équipe Hotel Ticket Hub",
+                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                hotel.getName(),
+                payment.getAmount().doubleValue(),
+                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
 
         sendEmail(hotel.getEmail(), subject, body);
     }
@@ -70,29 +72,29 @@ public class EmailService {
      */
     public void sendReport(Hotel hotel, Map<String, Object> report, String reportType) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("No email configured for hotel: {}", hotel.getName());
+            log.warn(LOG_NO_EMAIL_CONFIGURED, hotel.getName());
             return;
         }
 
         String subject = String.format("Rapport %s - %s", reportType, hotel.getName());
-        
+
         StringBuilder body = new StringBuilder();
         body.append("Bonjour,\n\n");
-        body.append(String.format("Voici votre rapport %s pour la période du %s au %s.\n\n", 
-            reportType,
-            ((Map<?, ?>) report.get("period")).get("start"),
-            ((Map<?, ?>) report.get("period")).get("end")));
-        
+        body.append(String.format("Voici votre rapport %s pour la période du %s au %s.\n\n",
+                reportType,
+                ((Map<?, ?>) report.get("period")).get("start"),
+                ((Map<?, ?>) report.get("period")).get("end")));
+
         body.append("Statistiques des tickets:\n");
         body.append(String.format("- Total: %d\n", report.get("totalTickets")));
         body.append(String.format("- Ouverts: %d\n", report.get("openTickets")));
         body.append(String.format("- En cours: %d\n", report.get("inProgressTickets")));
         body.append(String.format("- Résolus: %d\n", report.get("resolvedTickets")));
         body.append(String.format("- Urgents: %d\n", report.get("urgentTickets")));
-        
+
         if (report.containsKey("averageResolutionTimeHours")) {
-            body.append(String.format("- Temps moyen de résolution: %.2f heures\n", 
-                report.get("averageResolutionTimeHours")));
+            body.append(String.format("- Temps moyen de résolution: %.2f heures\n",
+                    report.get("averageResolutionTimeHours")));
         }
 
         body.append("\nCordialement,\n");
@@ -106,27 +108,26 @@ public class EmailService {
      */
     public void sendOverdueNotification(Hotel hotel, Payment payment) {
         if (hotel.getEmail() == null || hotel.getEmail().isEmpty()) {
-            log.warn("No email configured for hotel: {}", hotel.getName());
+            log.warn(LOG_NO_EMAIL_CONFIGURED, hotel.getName());
             return;
         }
 
         String subject = "Paiement en retard - " + hotel.getName();
         String body = String.format(
-            "Bonjour,\n\n" +
-            "Votre paiement est en retard depuis le %s.\n\n" +
-            "Détails:\n" +
-            "- Hôtel: %s\n" +
-            "- Montant dû: %.2f €\n" +
-            "- Date d'échéance: %s\n\n" +
-            "Votre accès aux services est actuellement suspendu.\n" +
-            "Veuillez régulariser votre paiement dès que possible pour rétablir l'accès.\n\n" +
-            "Cordialement,\n" +
-            "L'équipe Hotel Ticket Hub",
-            LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-            hotel.getName(),
-            payment.getAmount().doubleValue(),
-            payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        );
+                "Bonjour,\n\n" +
+                        "Votre paiement est en retard depuis le %s.\n\n" +
+                        "Détails:\n" +
+                        "- Hôtel: %s\n" +
+                        "- Montant dû: %.2f €\n" +
+                        "- Date d'échéance: %s\n\n" +
+                        "Votre accès aux services est actuellement suspendu.\n" +
+                        "Veuillez régulariser votre paiement dès que possible pour rétablir l'accès.\n\n" +
+                        "Cordialement,\n" +
+                        "L'équipe Hotel Ticket Hub",
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                hotel.getName(),
+                payment.getAmount().doubleValue(),
+                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
 
         sendEmail(hotel.getEmail(), subject, body);
     }
@@ -148,7 +149,7 @@ public class EmailService {
                 message.setTo(to);
                 message.setSubject(subject);
                 message.setText(body);
-                
+
                 mailSender.get().send(message);
                 log.info("EMAIL sent successfully to: {}", to);
             } catch (Exception e) {
@@ -165,4 +166,3 @@ public class EmailService {
         }
     }
 }
-
