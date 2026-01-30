@@ -345,7 +345,7 @@ public class TicketService {
             String extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
             List<String> allowedExtensions = List.of("jpg", "jpeg", "png", "gif", "webp");
             if (!allowedExtensions.contains(extension)) {
-                throw new RuntimeException(
+                throw new IllegalArgumentException(
                         "Extension de fichier non autorisée. Extensions autorisées: " + allowedExtensions);
             }
         }

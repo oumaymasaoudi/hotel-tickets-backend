@@ -142,7 +142,7 @@ public class AuthController {
                 .orElse(null);
 
         if (user == null) {
-            response.put("error", "User not found");
+            response.put(ERROR_KEY, "User not found");
             return ResponseEntity.ok(response);
         }
 

@@ -260,16 +260,16 @@ public class GdprController {
 
             case SUPERADMIN:
                 // System consents for superadmins
-                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données système",
+                consents.add(createConsentInfo(CONSENT_TYPE_DATA_PROCESSING, "Traitement des données système",
                         "Autoriser le traitement de vos données pour la gestion globale de la plateforme", true));
                 consents.add(createConsentInfo("SYSTEM_DATA", "Données système",
                         "Autoriser l'accès aux données système pour la gestion globale", true));
                 consents.add(createConsentInfo("AUDIT_LOGS", "Logs d'audit",
                         "Autoriser l'accès aux logs d'audit pour la sécurité", true));
-                consents.add(createConsentInfo("NOTIFICATIONS", "Notifications système",
+                consents.add(createConsentInfo(CONSENT_TYPE_NOTIFICATIONS, "Notifications système",
                         "Recevoir des notifications sur les activités système", true));
-                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques",
-                        "Autoriser l'utilisation de vos données pour améliorer le service", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_ANALYTICS, CONSENT_DESC_ANALYTICS,
+                        CONSENT_DESC_ANALYTICS_DETAIL, false));
                 break;
         }
 
