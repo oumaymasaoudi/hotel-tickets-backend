@@ -39,15 +39,15 @@ public class HotelService {
 
     public Hotel createHotel(HotelRequest request) {
         log.debug("createHotel: request={}", request);
-        
+
         if (request.getName() == null || request.getName().trim().isEmpty()) {
-            throw new RuntimeException("Le nom de l'hôtel est requis");
+            throw new IllegalArgumentException("Le nom de l'hôtel est requis");
         }
-        
+
         if (request.getPlanId() == null) {
-            throw new RuntimeException("Le plan d'abonnement est requis");
+            throw new IllegalArgumentException("Le plan d'abonnement est requis");
         }
-        
+
         Hotel hotel = new Hotel();
         hotel.setName(request.getName());
         hotel.setAddress(request.getAddress());

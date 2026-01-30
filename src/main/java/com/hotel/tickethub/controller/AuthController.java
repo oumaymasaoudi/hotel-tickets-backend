@@ -27,6 +27,8 @@ import java.util.Map;
 })
 public class AuthController {
 
+    private static final String ERROR_KEY = "error";
+
     private final AuthService authService;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
@@ -49,7 +51,7 @@ public class AuthController {
             // Return error message in JSON format for frontend
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("message", e.getMessage());
-            errorResponse.put("error", "Login failed");
+            errorResponse.put(ERROR_KEY, "Login failed");
             return ResponseEntity.status(400)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(errorResponse);
@@ -106,7 +108,7 @@ public class AuthController {
         } catch (Exception e) {
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("message", e.getMessage());
-            errorResponse.put("error", "Failed to create SuperAdmin");
+            errorResponse.put(ERROR_KEY, "Failed to create SuperAdmin");
             return ResponseEntity.status(400)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(errorResponse);

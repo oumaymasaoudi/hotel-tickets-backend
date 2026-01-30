@@ -33,6 +33,8 @@ services:
       - MANAGEMENT_HEALTH_MAIL_ENABLED=false
       # Activer l'endpoint Prometheus
       - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+      # Exposer les endpoints Actuator (health, info, prometheus, metrics)
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus,metrics
       # Limites de mémoire Java (ajustées pour t3.small - 2 Go RAM)
       # Architecture : VM Backend = application Spring Boot + Node Exporter
       # Monitoring (Prometheus, Grafana) = sur VM Ansible séparée

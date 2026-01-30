@@ -10,6 +10,7 @@ import com.hotel.tickethub.repository.HotelRepository;
 import com.hotel.tickethub.repository.UserRepository;
 import com.hotel.tickethub.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -60,15 +62,15 @@ public class AuthService {
                 (request.getRole().toUpperCase().equals("ADMIN") ||
                         request.getRole().toUpperCase().equals("TECHNICIAN"))) {
             if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
-                throw new RuntimeException("An ADMIN or TECHNICIAN must be linked to a hotel");
+                throw new IllegalArgumentException("An ADMIN or TECHNICIAN must be linked to a hotel");
             }
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
-                    .orElseThrow(() -> new RuntimeException("Hotel not found"));
+                    .orElseThrow(() -> new IllegalArgumentException("Hotel not found"));
             user.setHotel(hotel);
         } else if (request.getHotelId() != null && !request.getHotelId().isEmpty()) {
             // For other roles (CLIENT), hotel is optional
             Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
-                    .orElseThrow(() -> new RuntimeException("Hotel not found"));
+                    .orElseThrow(() -> new IllegalArgumentException("Hotel not found"));
             user.setHotel(hotel);
         }
 
@@ -109,11 +111,11 @@ public class AuthService {
     @Transactional
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found. Check your email."));
+                .orElseThrow(() -> new IllegalArgumentException("User not found. Check your email."));
 
         // Rule 13: Check if account is locked
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
-            throw new RuntimeException("Account locked. Try again after " + user.getLockedUntil());
+            throw new IllegalStateException("Account locked. Try again after " + user.getLockedUntil());
         }
 
         // If lock expired, reset
@@ -130,24 +132,24 @@ public class AuthService {
                 .or(() -> userRoleRepository.findByUserIdNative(user.getId()))
                 .orElseThrow(() -> {
                     // Debug: Log the issue
-                    System.out.println("DEBUG - User ID: " + user.getId());
-                    System.out.println("DEBUG - User ID type: " + user.getId().getClass().getName());
-                    return new RuntimeException("User role not found. Contact administrator. User ID: " + user.getId());
+                    log.debug("User ID: {}, User ID type: {}", user.getId(), user.getId().getClass().getName());
+                    return new IllegalStateException(
+                            "User role not found. Contact administrator. User ID: " + user.getId());
                 });
 
         // Debug: Log password verification details
         String providedPassword = request.getPassword();
         String storedHash = user.getPassword();
-        System.out.println("DEBUG Login - Email: " + user.getEmail());
-        System.out.println("DEBUG Login - Provided password length: "
-                + (providedPassword != null ? providedPassword.length() : 0));
-        System.out.println("DEBUG Login - Stored hash length: " + (storedHash != null ? storedHash.length() : 0));
-        System.out.println("DEBUG Login - Stored hash start: "
-                + (storedHash != null && storedHash.length() > 30 ? storedHash.substring(0, 30) : storedHash));
+        log.debug("Login attempt - Email: {}", user.getEmail());
+        log.debug("Login attempt - Provided password length: {}",
+                providedPassword != null ? providedPassword.length() : 0);
+        log.debug("Login attempt - Stored hash length: {}", storedHash != null ? storedHash.length() : 0);
+        log.debug("Login attempt - Stored hash start: {}",
+                storedHash != null && storedHash.length() > 30 ? storedHash.substring(0, 30) : storedHash);
 
         // Password verification with BCrypt
         boolean passwordMatches = passwordEncoder.matches(providedPassword, storedHash);
-        System.out.println("DEBUG Login - Password matches: " + passwordMatches);
+        log.debug("Login attempt - Password matches: {}", passwordMatches);
 
         if (!passwordMatches) {
             // Rule 13: Increment failed attempts
@@ -158,11 +160,11 @@ public class AuthService {
             if (attempts >= 5) {
                 user.setLockedUntil(LocalDateTime.now().plusMinutes(15));
                 userRepository.save(user);
-                throw new RuntimeException("Account locked after 5 failed attempts. Try again in 15 minutes.");
+                throw new IllegalStateException("Account locked after 5 failed attempts. Try again in 15 minutes.");
             }
 
             userRepository.save(user);
-            throw new RuntimeException("Incorrect password. Remaining attempts: " + (5 - attempts));
+            throw new IllegalArgumentException("Incorrect password. Remaining attempts: " + (5 - attempts));
         }
 
         // Successful login: reset attempts

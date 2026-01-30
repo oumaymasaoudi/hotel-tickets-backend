@@ -49,6 +49,15 @@ import java.util.UUID;
 })
 public class GdprController {
 
+    // Consent type constants
+    private static final String CONSENT_TYPE_DATA_PROCESSING = "DATA_PROCESSING";
+    private static final String CONSENT_TYPE_ANALYTICS = "ANALYTICS";
+    private static final String CONSENT_TYPE_NOTIFICATIONS = "NOTIFICATIONS";
+
+    // Consent description constants
+    private static final String CONSENT_DESC_ANALYTICS = "Analyse et statistiques";
+    private static final String CONSENT_DESC_ANALYTICS_DETAIL = "Autoriser l'utilisation de vos données pour améliorer le service";
+
     private final GdprService gdprService;
     private final UserRepository userRepository;
     private final com.hotel.tickethub.repository.UserRoleRepository userRoleRepository;
@@ -64,15 +73,15 @@ public class GdprController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         try {
-            log.debug("recordConsent called for user: {}", 
-                authentication != null ? authentication.getName() : "NULL");
-            
+            log.debug("recordConsent called for user: {}",
+                    authentication != null ? authentication.getName() : "NULL");
+
             User user = getUserFromRequest(authentication, httpRequest);
             String ipAddress = getClientIpAddress(httpRequest);
             String userAgent = httpRequest.getHeader("User-Agent");
 
-            log.debug("Recording consent - User: {}, Type: {}, Consented: {}", 
-                user.getEmail(), request.getConsentType(), request.getConsented());
+            log.debug("Recording consent - User: {}, Type: {}, Consented: {}",
+                    user.getEmail(), request.getConsentType(), request.getConsented());
 
             GdprConsent consent = gdprService.recordConsent(
                     user.getId(),
@@ -81,9 +90,9 @@ public class GdprController {
                     ipAddress,
                     userAgent);
 
-            log.info("Consent recorded successfully - User: {}, Type: {}", 
-                user.getEmail(), request.getConsentType());
-            
+            log.info("Consent recorded successfully - User: {}, Type: {}",
+                    user.getEmail(), request.getConsentType());
+
             // Create DTO to avoid infinite recursion
             Map<String, Object> consentDto = new HashMap<>();
             consentDto.put("id", consent.getId());
@@ -96,7 +105,7 @@ public class GdprController {
             consentDto.put("userAgent", consent.getUserAgent());
             consentDto.put("createdAt", consent.getCreatedAt());
             consentDto.put("updatedAt", consent.getUpdatedAt());
-            
+
             return ResponseEntity.ok(consentDto);
         } catch (Exception e) {
             log.error("Error recording consent: {}", e.getMessage(), e);
@@ -117,15 +126,15 @@ public class GdprController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         try {
-            log.debug("getUserConsents called for user: {}", 
-                authentication != null ? authentication.getName() : "NULL");
-            
+            log.debug("getUserConsents called for user: {}",
+                    authentication != null ? authentication.getName() : "NULL");
+
             User user = getUserFromRequest(authentication, httpRequest);
             log.debug("Fetching consents for user: {}", user.getEmail());
-            
+
             List<GdprConsent> consents = gdprService.getUserConsents(user.getId());
             log.debug("Found {} consents for user: {}", consents.size(), user.getEmail());
-            
+
             // Convert to DTO to avoid infinite recursion
             List<Map<String, Object>> consentDtos = consents.stream().map(consent -> {
                 Map<String, Object> dto = new HashMap<>();
@@ -141,7 +150,7 @@ public class GdprController {
                 dto.put("updatedAt", consent.getUpdatedAt());
                 return dto;
             }).toList();
-            
+
             return ResponseEntity.ok(consentDtos);
         } catch (Exception e) {
             log.error("Error fetching user consents: {}", e.getMessage(), e);
@@ -151,7 +160,8 @@ public class GdprController {
 
     /**
      * GET /api/gdpr/available-consents
-     * Récupérer les types de consentements disponibles selon le rôle de l'utilisateur
+     * Récupérer les types de consentements disponibles selon le rôle de
+     * l'utilisateur
      */
     @GetMapping("/available-consents")
     @PreAuthorize("isAuthenticated()")
@@ -162,110 +172,110 @@ public class GdprController {
             log.debug("getAvailableConsents called");
             User user = getUserFromRequest(authentication, httpRequest);
             log.debug("User found: {}", user.getEmail());
-            
+
             com.hotel.tickethub.model.enums.UserRole userRole = getUserRole(user);
             log.debug("User role: {}", userRole);
-            
+
             List<Map<String, Object>> availableConsents = getConsentsForRole(userRole);
             log.debug("Available consents count: {}", availableConsents.size());
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("role", userRole.name());
             response.put("availableConsents", availableConsents);
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error getting available consents: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
     }
-    
+
     /**
      * Get user's primary role
      * Uses same methods as AuthService to handle UUID/VARCHAR type issues
      */
     private com.hotel.tickethub.model.enums.UserRole getUserRole(User user) {
         log.debug("getUserRole for user: {}, ID: {}", user.getEmail(), user.getId());
-        
+
         // Try three methods like AuthService
         Optional<com.hotel.tickethub.model.UserRole> userRoleOpt = userRoleRepository.findByUserId(user.getId())
                 .or(() -> userRoleRepository.findByUserIdCustom(user.getId()))
                 .or(() -> userRoleRepository.findByUserIdNative(user.getId()));
-        
+
         if (userRoleOpt.isPresent()) {
             com.hotel.tickethub.model.enums.UserRole role = userRoleOpt.get().getRole();
             log.debug("Role found: {}", role);
             return role;
         }
-        
+
         log.warn("No role found for user: {}, defaulting to CLIENT", user.getEmail());
         // Default: CLIENT
         return com.hotel.tickethub.model.enums.UserRole.CLIENT;
     }
-    
+
     /**
      * Get available consent types by role
      */
     private List<Map<String, Object>> getConsentsForRole(com.hotel.tickethub.model.enums.UserRole role) {
         List<Map<String, Object>> consents = new java.util.ArrayList<>();
-        
+
         switch (role) {
             case CLIENT:
                 // Standard consents for clients
-                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données personnelles", 
-                    "Autoriser le traitement de vos données pour la fourniture du service", true));
-                consents.add(createConsentInfo("MARKETING", "Communications marketing", 
-                    "Recevoir des emails promotionnels et des offres spéciales", false));
-                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques", 
-                    "Autoriser l'utilisation de vos données pour améliorer le service", false));
-                consents.add(createConsentInfo("THIRD_PARTY", "Partage avec des tiers", 
-                    "Autoriser le partage de données avec nos partenaires de confiance", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_DATA_PROCESSING, "Traitement des données personnelles",
+                        "Autoriser le traitement de vos données pour la fourniture du service", true));
+                consents.add(createConsentInfo("MARKETING", "Communications marketing",
+                        "Recevoir des emails promotionnels et des offres spéciales", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_ANALYTICS, CONSENT_DESC_ANALYTICS,
+                        CONSENT_DESC_ANALYTICS_DETAIL, false));
+                consents.add(createConsentInfo("THIRD_PARTY", "Partage avec des tiers",
+                        "Autoriser le partage de données avec nos partenaires de confiance", false));
                 break;
-                
+
             case TECHNICIAN:
                 // Professional consents for technicians
-                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données professionnelles", 
-                    "Autoriser le traitement de vos données pour l'exécution de vos missions", true));
-                consents.add(createConsentInfo("PROFESSIONAL_DATA", "Données professionnelles", 
-                    "Autoriser l'utilisation de vos données professionnelles (spécialités, performances)", false));
-                consents.add(createConsentInfo("NOTIFICATIONS", "Notifications professionnelles", 
-                    "Recevoir des notifications sur les tickets assignés et les mises à jour", true));
-                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques", 
-                    "Autoriser l'utilisation de vos données pour améliorer le service", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_DATA_PROCESSING, "Traitement des données professionnelles",
+                        "Autoriser le traitement de vos données pour l'exécution de vos missions", true));
+                consents.add(createConsentInfo("PROFESSIONAL_DATA", "Données professionnelles",
+                        "Autoriser l'utilisation de vos données professionnelles (spécialités, performances)", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_NOTIFICATIONS, "Notifications professionnelles",
+                        "Recevoir des notifications sur les tickets assignés et les mises à jour", true));
+                consents.add(createConsentInfo(CONSENT_TYPE_ANALYTICS, CONSENT_DESC_ANALYTICS,
+                        CONSENT_DESC_ANALYTICS_DETAIL, false));
                 break;
-                
+
             case ADMIN:
                 // Management consents for admins
-                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données administratives", 
-                    "Autoriser le traitement de vos données pour la gestion de l'hôtel", true));
-                consents.add(createConsentInfo("HOTEL_DATA", "Données de l'hôtel", 
-                    "Autoriser l'utilisation des données de votre hôtel pour les rapports et analyses", true));
-                consents.add(createConsentInfo("TEAM_MANAGEMENT", "Gestion d'équipe", 
-                    "Autoriser l'accès aux données de votre équipe pour la gestion", true));
-                consents.add(createConsentInfo("NOTIFICATIONS", "Notifications administratives", 
-                    "Recevoir des notifications sur les activités de l'hôtel", true));
-                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques", 
-                    "Autoriser l'utilisation de vos données pour améliorer le service", false));
+                consents.add(createConsentInfo(CONSENT_TYPE_DATA_PROCESSING, "Traitement des données administratives",
+                        "Autoriser le traitement de vos données pour la gestion de l'hôtel", true));
+                consents.add(createConsentInfo("HOTEL_DATA", "Données de l'hôtel",
+                        "Autoriser l'utilisation des données de votre hôtel pour les rapports et analyses", true));
+                consents.add(createConsentInfo("TEAM_MANAGEMENT", "Gestion d'équipe",
+                        "Autoriser l'accès aux données de votre équipe pour la gestion", true));
+                consents.add(createConsentInfo(CONSENT_TYPE_NOTIFICATIONS, "Notifications administratives",
+                        "Recevoir des notifications sur les activités de l'hôtel", true));
+                consents.add(createConsentInfo(CONSENT_TYPE_ANALYTICS, CONSENT_DESC_ANALYTICS,
+                        CONSENT_DESC_ANALYTICS_DETAIL, false));
                 break;
-                
+
             case SUPERADMIN:
                 // System consents for superadmins
-                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données système", 
-                    "Autoriser le traitement de vos données pour la gestion globale de la plateforme", true));
-                consents.add(createConsentInfo("SYSTEM_DATA", "Données système", 
-                    "Autoriser l'accès aux données système pour la gestion globale", true));
-                consents.add(createConsentInfo("AUDIT_LOGS", "Logs d'audit", 
-                    "Autoriser l'accès aux logs d'audit pour la sécurité", true));
-                consents.add(createConsentInfo("NOTIFICATIONS", "Notifications système", 
-                    "Recevoir des notifications sur les activités système", true));
-                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques", 
-                    "Autoriser l'utilisation de vos données pour améliorer le service", false));
+                consents.add(createConsentInfo("DATA_PROCESSING", "Traitement des données système",
+                        "Autoriser le traitement de vos données pour la gestion globale de la plateforme", true));
+                consents.add(createConsentInfo("SYSTEM_DATA", "Données système",
+                        "Autoriser l'accès aux données système pour la gestion globale", true));
+                consents.add(createConsentInfo("AUDIT_LOGS", "Logs d'audit",
+                        "Autoriser l'accès aux logs d'audit pour la sécurité", true));
+                consents.add(createConsentInfo("NOTIFICATIONS", "Notifications système",
+                        "Recevoir des notifications sur les activités système", true));
+                consents.add(createConsentInfo("ANALYTICS", "Analyse et statistiques",
+                        "Autoriser l'utilisation de vos données pour améliorer le service", false));
                 break;
         }
-        
+
         return consents;
     }
-    
+
     private Map<String, Object> createConsentInfo(String id, String label, String description, boolean required) {
         Map<String, Object> info = new HashMap<>();
         info.put("id", id);
@@ -326,8 +336,8 @@ public class GdprController {
                     .message("Votre demande de suppression a été enregistrée. Elle sera traitée dans les 30 jours.")
                     .build();
 
-            log.info("Data deletion request created successfully for user: {}, requestId: {}", 
-                user.getEmail(), request.getId());
+            log.info("Data deletion request created successfully for user: {}, requestId: {}",
+                    user.getEmail(), request.getId());
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
         } catch (Exception e) {
             log.error("Error creating data deletion request: {}", e.getMessage(), e);
@@ -381,7 +391,7 @@ public class GdprController {
      */
     private User getUserFromRequest(Authentication authentication, HttpServletRequest request) {
         final String email;
-        
+
         // Try authentication first
         if (authentication != null && authentication.getName() != null) {
             email = authentication.getName();
@@ -391,12 +401,12 @@ public class GdprController {
             String headerEmail = request.getHeader("X-User-Email");
             if (headerEmail == null || headerEmail.isEmpty()) {
                 log.error("No email found in authentication or headers");
-                throw new RuntimeException("Authentication required: No user email found");
+                throw new IllegalStateException("Authentication required: No user email found");
             }
             email = headerEmail;
             log.debug("Getting user from X-User-Email header: {}", email);
         }
-        
+
         final String finalEmail = email; // Final variable for lambda
         return userRepository.findByEmail(finalEmail)
                 .orElseThrow(() -> {
@@ -404,19 +414,19 @@ public class GdprController {
                     return new RuntimeException("User not found for email: " + finalEmail);
                 });
     }
-    
+
     /**
      * Get user from authentication (legacy method)
      */
     private User getUserFromAuthentication(Authentication authentication) {
         if (authentication == null) {
             log.error("Authentication is null");
-            throw new RuntimeException("Authentication required");
+            throw new IllegalStateException("Authentication required");
         }
-        
+
         String email = authentication.getName();
         log.debug("Getting user from email: {}", email);
-        
+
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     log.error("User not found for email: {}", email);

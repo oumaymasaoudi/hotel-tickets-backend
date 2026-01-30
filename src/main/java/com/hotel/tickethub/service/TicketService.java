@@ -100,67 +100,68 @@ public class TicketService {
 
     /**
      * Récupérer les tickets d'un technicien
-     * Règle de gestion: Les techniciens ne peuvent voir que les tickets correspondant 
+     * Règle de gestion: Les techniciens ne peuvent voir que les tickets
+     * correspondant
      * à leur catégorie (spécialités) et à leur hôtel
      */
     public List<TicketResponse> getTicketsByTechnician(UUID technicianId) {
-        System.out.println("DEBUG - getTicketsByTechnician service called with technicianId: " + technicianId);
-        
+        log.debug("getTicketsByTechnician service called with technicianId: {}", technicianId);
+
         User technician = userRepository.findById(technicianId)
-                .orElseThrow(() -> new RuntimeException("Technician not found"));
-        
-        System.out.println("DEBUG - Technician found: " + technician.getEmail());
-        System.out.println("DEBUG - Technician hotel: " + (technician.getHotel() != null ? technician.getHotel().getId() : "NULL"));
-        System.out.println("DEBUG - Technician specialties: " + technician.getSpecialties());
-        
+                .orElseThrow(() -> new IllegalArgumentException("Technician not found"));
+
+        log.debug("Technician found: {}", technician.getEmail());
+        log.debug("Technician hotel: {}", technician.getHotel() != null ? technician.getHotel().getId() : "NULL");
+        log.debug("Technician specialties: {}", technician.getSpecialties());
+
         // Get all tickets assigned to technician
         List<Ticket> assignedTickets = ticketRepository.findByAssignedTechnicianId(technicianId);
         log.debug("Total assigned tickets found: {}", assignedTickets.size());
-        
+
         // Get technician specialties (categories)
         List<String> specialties = technician.getSpecialties();
         if (specialties == null || specialties.isEmpty()) {
             log.warn("Technician {} has no specialties, returning empty list", technicianId);
             return List.of(); // No specialties = no visible tickets
         }
-        
+
         log.debug("Technician specialties: {}", specialties);
-        
+
         // Filter tickets by hotel AND category (specialties)
         // Rule 6: Technicians can only see tickets matching their category and hotel
         List<TicketResponse> result = assignedTickets.stream()
                 .filter(ticket -> {
                     log.debug("Checking ticket: {}", ticket.getTicketNumber());
-                    
+
                     // Check hotel match
                     if (technician.getHotel() == null) {
                         log.debug("Technician has no hotel, excluding ticket");
                         return false;
                     }
-                    
+
                     boolean hotelMatch = ticket.getHotel().getId().equals(technician.getHotel().getId());
                     if (!hotelMatch) {
                         log.debug("Ticket filtered out: hotel mismatch");
                         return false;
                     }
-                    
+
                     // Check category match (ticket category must be in technician specialties)
                     String ticketCategoryName = ticket.getCategory().getName();
                     boolean categoryMatch = specialties.stream()
                             .anyMatch(specialty -> specialty.trim().equalsIgnoreCase(ticketCategoryName.trim()));
-                    
+
                     if (!categoryMatch) {
-                        log.debug("Ticket filtered out: category mismatch (ticket: {}, specialties: {})", 
+                        log.debug("Ticket filtered out: category mismatch (ticket: {}, specialties: {})",
                                 ticketCategoryName, specialties);
                         return false;
                     }
-                    
+
                     log.debug("Ticket included: hotel and category match");
                     return true;
                 })
                 .map(this::convertToResponse)
                 .toList();
-        
+
         log.debug("Final result: {} tickets after filtering", result.size());
         return result;
     }
@@ -182,57 +183,53 @@ public class TicketService {
 
     @Transactional
     public TicketResponse updateTicketStatus(UUID ticketId, UpdateTicketStatusRequest request, UUID userId) {
-        System.out.println("DEBUG - TicketService.updateTicketStatus called");
-        System.out.println("DEBUG - ticketId: " + ticketId);
-        System.out.println("DEBUG - userId: " + userId);
-        System.out.println("DEBUG - request status: " + request.getStatus());
-        System.out.println("DEBUG - request technicianId: " + request.getTechnicianId());
-        
+        log.debug("TicketService.updateTicketStatus called - ticketId: {}, userId: {}, status: {}, technicianId: {}",
+                ticketId, userId, request.getStatus(), request.getTechnicianId());
+
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> {
-                    System.out.println("ERROR - Ticket not found: " + ticketId);
-                    return new RuntimeException(TICKET_NOT_FOUND_MESSAGE);
+                    log.error("Ticket not found: {}", ticketId);
+                    return new IllegalArgumentException(TICKET_NOT_FOUND_MESSAGE);
                 });
 
-        System.out.println("DEBUG - Ticket found: " + ticket.getTicketNumber());
-        System.out.println("DEBUG - Current status: " + ticket.getStatus());
+        log.debug("Ticket found: {}, current status: {}", ticket.getTicketNumber(), ticket.getStatus());
 
         TicketStatus oldStatus = ticket.getStatus();
-        
+
         if (request.getStatus() == null) {
-            System.out.println("ERROR - Status is null in request");
-            throw new RuntimeException("Status cannot be null");
+            log.error("Status is null in request");
+            throw new IllegalArgumentException("Status cannot be null");
         }
-        
+
         ticket.setStatus(request.getStatus());
-        System.out.println("DEBUG - New status set: " + request.getStatus());
+        log.debug("New status set: {}", request.getStatus());
 
         if (request.getTechnicianId() != null) {
             User technician = userRepository.findById(request.getTechnicianId())
                     .orElseThrow(() -> {
-                        System.out.println("ERROR - Technician not found: " + request.getTechnicianId());
-                        return new RuntimeException("Technician not found");
+                        log.error("Technician not found: {}", request.getTechnicianId());
+                        return new IllegalArgumentException("Technician not found");
                     });
             ticket.setAssignedTechnician(technician);
-            System.out.println("DEBUG - Technician assigned: " + technician.getEmail());
+            log.debug("Technician assigned: {}", technician.getEmail());
         }
 
         if (request.getStatus() == TicketStatus.RESOLVED || request.getStatus() == TicketStatus.CLOSED) {
             ticket.setResolvedAt(LocalDateTime.now());
-            System.out.println("DEBUG - ResolvedAt set to: " + ticket.getResolvedAt());
+            log.debug("ResolvedAt set to: {}", ticket.getResolvedAt());
         }
 
         ticket = ticketRepository.save(ticket);
-        System.out.println("DEBUG - Ticket saved successfully");
+        log.debug("Ticket saved successfully");
 
         // Log history
         User performedBy = userRepository.findById(userId).orElse(null);
         if (performedBy != null) {
-            System.out.println("DEBUG - Logging history for user: " + performedBy.getEmail());
+            log.debug("Logging history for user: {}", performedBy.getEmail());
         }
         logTicketHistory(ticket, "STATUS_CHANGE", oldStatus.name(), request.getStatus().name(), performedBy);
 
-        System.out.println("DEBUG - updateTicketStatus completed successfully");
+        log.debug("updateTicketStatus completed successfully");
         return convertToResponse(ticket);
     }
 
@@ -348,7 +345,8 @@ public class TicketService {
             String extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
             List<String> allowedExtensions = List.of("jpg", "jpeg", "png", "gif", "webp");
             if (!allowedExtensions.contains(extension)) {
-                throw new RuntimeException("Extension de fichier non autorisée. Extensions autorisées: " + allowedExtensions);
+                throw new RuntimeException(
+                        "Extension de fichier non autorisée. Extensions autorisées: " + allowedExtensions);
             }
         }
 
