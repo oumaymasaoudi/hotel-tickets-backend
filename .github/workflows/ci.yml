@@ -400,19 +400,66 @@ jobs:
           chmod 600 ~/.ssh/config
 
       - name: Test SSH Connection
+        continue-on-error: true
+        id: ssh_test
         run: |
           echo "Testing SSH connection..."
-          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no backend-staging "echo 'SSH connection successful'" || {
-            echo "ERROR: SSH connection failed"
-            echo "Verify that:"
-            echo "  - The VM is accessible from GitHub Actions"
-            echo "  - The AWS Security Group allows connections from GitHub"
-            echo "  - The secrets STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY are correct"
+          echo "Host: ${{ secrets.STAGING_HOST }}"
+          echo "User: ${{ secrets.STAGING_USER }}"
+          echo ""
+          echo "Checking if secrets are set..."
+          if [ -z "${{ secrets.STAGING_HOST }}" ] || [ -z "${{ secrets.STAGING_USER }}" ] || [ -z "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" ]; then
+            echo "ERROR: One or more secrets are missing"
+            echo "Required secrets: STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY"
+            echo "::error::Missing required secrets for SSH connection"
             exit 1
-          }
-          echo "SSH connection OK"
+          fi
+          echo "✓ Secrets are set"
+          echo ""
+          echo "Testing network connectivity (ping)..."
+          if ping -c 2 -W 5 ${{ secrets.STAGING_HOST }} > /dev/null 2>&1; then
+            echo "✓ VM responds to ping"
+          else
+            echo "⚠ VM does not respond to ping (may be blocked by Security Group)"
+          fi
+          echo ""
+          echo "Testing SSH connection..."
+          if timeout 30 ssh -F ~/.ssh/config -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes backend-staging "echo 'SSH connection successful'" 2>&1; then
+            echo "✓ SSH connection successful"
+            echo "ssh_ok=true" >> $GITHUB_OUTPUT
+          else
+            SSH_EXIT_CODE=$?
+            echo ""
+            echo "=========================================="
+            echo "ERROR: SSH connection failed (exit code: $SSH_EXIT_CODE)"
+            echo "=========================================="
+            echo ""
+            echo "Possible causes:"
+            echo "1. AWS Security Group blocks SSH connections"
+            echo "   → Solution: Add inbound rule for SSH (port 22) from 0.0.0.0/0"
+            echo "   → AWS Console: EC2 > Security Groups > [Your SG] > Inbound rules > Add rule"
+            echo ""
+            echo "2. VM IP address changed or instance stopped"
+            echo "   → Solution: Verify instance is running and IP is correct"
+            echo "   → Current IP in secret: ${{ secrets.STAGING_HOST }}"
+            echo ""
+            echo "3. SSH key incorrect or expired"
+            echo "   → Solution: Verify STAGING_SSH_PRIVATE_KEY secret is correct"
+            echo ""
+            echo "Quick fix via AWS Console:"
+            echo "1. Go to https://console.aws.amazon.com/ec2"
+            echo "2. Find instance with IP ${{ secrets.STAGING_HOST }}"
+            echo "3. Open Security Group > Inbound rules"
+            echo "4. Add rule: Type=SSH, Port=22, Source=0.0.0.0/0"
+            echo ""
+            echo "See scripts/fix-github-actions-ssh.md for detailed troubleshooting"
+            echo "ssh_ok=false" >> $GITHUB_OUTPUT
+            echo "::error::SSH connection failed. Check Security Group configuration."
+            exit 1
+          fi
 
       - name: Prepare staging directory
+        if: steps.ssh_test.outputs.ssh_ok == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
@@ -425,6 +472,7 @@ jobs:
             chmod 755 /opt/hotel-ticket-hub-backend-staging
       
       - name: Copy docker-compose to staging
+        if: steps.ssh_test.outputs.ssh_ok == 'true'
         run: |
           if [ ! -f "docker-compose.yml" ]; then
             echo "ERROR: docker-compose.yml not found in workspace"
@@ -451,6 +499,7 @@ jobs:
           fi
       
       - name: Verify docker-compose file copied
+        if: steps.ssh_test.outputs.ssh_ok == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
@@ -468,6 +517,7 @@ jobs:
             fi
 
       - name: Deploy to staging VM
+        if: steps.ssh_test.outputs.ssh_ok == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
