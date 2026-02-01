@@ -35,6 +35,10 @@ services:
       - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
       # Exposer les endpoints Actuator (health, info, prometheus, metrics)
       - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus,metrics
+      # Histogrammes HTTP (obligatoire pour quantiles / p95 via buckets)
+      - MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HISTOGRAM_HTTP_SERVER_REQUESTS=true
+      # Optionnel : buckets (SLA) personnalisés
+      - MANAGEMENT_METRICS_DISTRIBUTION_SLA_HTTP_SERVER_REQUESTS=10ms,50ms,100ms,200ms,500ms,1s,2s,5s
       # Limites de mémoire Java (ajustées pour t3.small - 2 Go RAM)
       # Architecture : VM Backend = application Spring Boot + Node Exporter
       # Monitoring (Prometheus, Grafana) = sur VM Ansible séparée

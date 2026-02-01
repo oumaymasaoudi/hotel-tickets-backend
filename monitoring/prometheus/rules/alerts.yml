@@ -36,42 +36,121 @@ groups:
     interval: 30s
     rules:
       # Service down
-      - alert: ServiceDown
-        expr: up{job="backend"} == 0
+      - alert: BackendServiceDown
+        expr: up{job="staging-backend"} == 0
         for: 1m
         labels:
           severity: critical
+          application: hotel-ticket-hub-backend
         annotations:
           summary: "Backend service is down"
-          description: "Backend service has been down for more than 1 minute"
+          description: "Backend service ({{ $labels.instance }}) has been down for more than 1 minute"
 
       # Taux d'erreur HTTP élevé
       - alert: HighErrorRate
-        expr: (sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m]))) * 100 > 5
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="staging-backend",status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count{job="staging-backend"}[5m]))
+          ) * 100 > 5
         for: 5m
         labels:
           severity: warning
+          application: hotel-ticket-hub-backend
         annotations:
-          summary: "High error rate"
-          description: "Error rate is above 5% for more than 5 minutes"
+          summary: "High HTTP error rate on backend"
+          description: "Error rate is above 5% for more than 5 minutes on {{ $labels.instance }}"
 
       # Temps de réponse élevé
       - alert: HighResponseTime
-        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) > 2
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket{job="staging-backend"}[5m])) by (le)
+          ) > 2
         for: 5m
         labels:
           severity: warning
+          application: hotel-ticket-hub-backend
         annotations:
-          summary: "High response time"
-          description: "95th percentile response time is above 2 seconds for more than 5 minutes"
+          summary: "High response time on backend"
+          description: "95th percentile response time is above 2 seconds for more than 5 minutes on {{ $labels.instance }}"
 
-      # JVM mémoire élevée
+      # JVM mémoire heap élevée
       - alert: HighJVMMemory
-        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 85
+        expr: |
+          (
+            jvm_memory_used_bytes{job="staging-backend",area="heap"}
+            /
+            jvm_memory_max_bytes{job="staging-backend",area="heap"}
+          ) * 100 > 85
         for: 5m
         labels:
           severity: warning
+          application: hotel-ticket-hub-backend
         annotations:
-          summary: "JVM memory usage is high"
-          description: "JVM heap memory usage is above 85% for more than 5 minutes"
+          summary: "High JVM heap memory usage"
+          description: "JVM heap memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      # JVM mémoire heap critique
+      - alert: CriticalJVMMemory
+        expr: |
+          (
+            jvm_memory_used_bytes{job="staging-backend",area="heap"}
+            /
+            jvm_memory_max_bytes{job="staging-backend",area="heap"}
+          ) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          application: hotel-ticket-hub-backend
+        annotations:
+          summary: "Critical JVM heap memory usage"
+          description: "JVM heap memory usage is above 95% for more than 2 minutes on {{ $labels.instance }}. OutOfMemoryError imminent!"
+
+      # Nombre de threads élevé
+      - alert: HighThreadCount
+        expr: jvm_threads_live_threads{job="staging-backend"} > 200
+        for: 5m
+        labels:
+          severity: warning
+          application: hotel-ticket-hub-backend
+        annotations:
+          summary: "High thread count"
+          description: "Thread count is above 200 for more than 5 minutes on {{ $labels.instance }}"
+
+      # Taux de GC élevé
+      - alert: HighGCRate
+        expr: |
+          sum(rate(jvm_gc_pause_seconds_count{job="staging-backend"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          application: hotel-ticket-hub-backend
+        annotations:
+          summary: "High garbage collection rate"
+          description: "GC rate is above 10 collections/second for more than 5 minutes on {{ $labels.instance }}"
+
+      # Durée de GC élevée
+      - alert: HighGCDuration
+        expr: |
+          sum(rate(jvm_gc_pause_seconds_sum{job="staging-backend"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          application: hotel-ticket-hub-backend
+        annotations:
+          summary: "High garbage collection duration"
+          description: "GC is taking more than 1 second/second for more than 5 minutes on {{ $labels.instance }}"
+
+      # Connexions base de données élevées
+      - alert: HighDatabaseConnections
+        expr: hikari_connections_active{job="staging-backend"} / hikari_connections_max{job="staging-backend"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          application: hotel-ticket-hub-backend
+        annotations:
+          summary: "High database connection pool usage"
+          description: "Database connection pool usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
 
