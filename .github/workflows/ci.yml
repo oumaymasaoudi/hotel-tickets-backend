@@ -10,6 +10,29 @@ on:
     branches: [ main, develop ]
     paths:
       - '**'
+  schedule:
+    # Security scan tous les lundis à 2h du matin
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      utility_action:
+        description: 'Action utilitaire à exécuter'
+        required: false
+        type: choice
+        options:
+          - ''
+          - check-backend-status
+          - add-oumayma-key-backend
+          - add-oumayma-key-frontend
+      public_key:
+        description: 'Clé publique SSH (requis pour add-oumayma-key-backend)'
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
 
 env:
   JAVA_VERSION: '17'
@@ -307,6 +330,75 @@ jobs:
       
 
   # ============================================
+  # SECURITY SCAN
+  # ============================================
+  dependency-check:
+    name: Backend - OWASP Dependency Check
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    continue-on-error: true
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'hotel-ticket-hub-backend'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --failOnCVSS 7
+            --suppression owasp-dependency-check-suppressions.xml
+            --enableRetired
+            --enableExperimental
+        continue-on-error: true
+
+      - name: Upload Dependency Check results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: reports/dependency-check-report.html
+          retention-days: 7
+          if-no-files-found: ignore
+
+  security-lint:
+    name: Backend - Security Linting (Trivy)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    continue-on-error: true
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================
   # DOCKER BUILD & PUSH (for develop branch)
   # ============================================
   docker-build:
@@ -414,18 +506,18 @@ jobs:
             echo "::error::Missing required secrets for SSH connection"
             exit 1
           fi
-          echo "✓ Secrets are set"
+          echo "OK: Secrets are set"
           echo ""
           echo "Testing network connectivity (ping)..."
           if ping -c 2 -W 5 ${{ secrets.STAGING_HOST }} > /dev/null 2>&1; then
-            echo "✓ VM responds to ping"
+            echo "OK: VM responds to ping"
           else
-            echo "⚠ VM does not respond to ping (may be blocked by Security Group)"
+            echo "WARNING: VM does not respond to ping (may be blocked by Security Group)"
           fi
           echo ""
           echo "Testing SSH connection..."
           if timeout 30 ssh -F ~/.ssh/config -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes backend-staging "echo 'SSH connection successful'" 2>&1; then
-            echo "✓ SSH connection successful"
+            echo "OK: SSH connection successful"
             echo "ssh_ok=true" >> $GITHUB_OUTPUT
           else
             SSH_EXIT_CODE=$?
@@ -688,6 +780,10 @@ jobs:
           script: |
             mkdir -p ${{ env.MONITORING_DIR }}
             chmod 755 ${{ env.MONITORING_DIR }}
+            # Create grafana dashboards directory with correct permissions
+            sudo mkdir -p ${{ env.MONITORING_DIR }}/grafana/dashboards
+            sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/grafana/dashboards
+            chmod 755 ${{ env.MONITORING_DIR }}/grafana/dashboards
       
       - name: Copy monitoring files to VM
         run: |
@@ -695,6 +791,12 @@ jobs:
             echo "ERROR: monitoring directory not found in workspace"
             exit 1
           fi
+          echo "Preparing directories on VM with correct permissions..."
+          ssh -F ~/.ssh/config \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              monitoring-vm "sudo mkdir -p ${{ env.MONITORING_DIR }}/grafana/dashboards && sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/grafana/dashboards" || true
+          
           echo "Copying monitoring files via SCP..."
           if scp -F ~/.ssh/config \
               -o StrictHostKeyChecking=no \
@@ -702,22 +804,42 @@ jobs:
               -r monitoring/* \
               monitoring-vm:${{ env.MONITORING_DIR }}/; then
             echo "Files copied successfully via SCP"
+            # Fix permissions for grafana dashboards if needed
+            ssh -F ~/.ssh/config \
+                -o StrictHostKeyChecking=no \
+                -o ConnectTimeout=10 \
+                monitoring-vm "sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/grafana/dashboards 2>/dev/null || true"
           else
             echo "SCP failed, trying alternative method via SSH..."
             cd monitoring
             for file in $(find . -type f); do
               target_dir="${{ env.MONITORING_DIR }}/$(dirname "$file")"
-              ssh -F ~/.ssh/config \
-                  -o StrictHostKeyChecking=no \
-                  -o ConnectTimeout=10 \
-                  monitoring-vm "mkdir -p $target_dir" || true
-              cat "$file" | ssh -F ~/.ssh/config \
-                  -o StrictHostKeyChecking=no \
-                  -o ConnectTimeout=10 \
-                  monitoring-vm "cat > ${{ env.MONITORING_DIR }}/$file" || {
-                echo "ERROR: Failed to copy $file"
-                exit 1
-              }
+              # Use sudo for grafana/dashboards directory
+              if echo "$file" | grep -q "grafana/dashboards"; then
+                ssh -F ~/.ssh/config \
+                    -o StrictHostKeyChecking=no \
+                    -o ConnectTimeout=10 \
+                    monitoring-vm "sudo mkdir -p $target_dir && sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} $target_dir" || true
+                cat "$file" | ssh -F ~/.ssh/config \
+                    -o StrictHostKeyChecking=no \
+                    -o ConnectTimeout=10 \
+                    monitoring-vm "sudo tee ${{ env.MONITORING_DIR }}/$file > /dev/null && sudo chown ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/$file" || {
+                  echo "ERROR: Failed to copy $file"
+                  exit 1
+                }
+              else
+                ssh -F ~/.ssh/config \
+                    -o StrictHostKeyChecking=no \
+                    -o ConnectTimeout=10 \
+                    monitoring-vm "mkdir -p $target_dir" || true
+                cat "$file" | ssh -F ~/.ssh/config \
+                    -o StrictHostKeyChecking=no \
+                    -o ConnectTimeout=10 \
+                    monitoring-vm "cat > ${{ env.MONITORING_DIR }}/$file" || {
+                  echo "ERROR: Failed to copy $file"
+                  exit 1
+                }
+              fi
             done
             echo "Files copied successfully via SSH"
           fi
@@ -1020,4 +1142,177 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
+
+  # ============================================
+  # UTILITIES (workflow_dispatch only)
+  # ============================================
+  check-backend-status:
+    name: Verifier l'etat du Backend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.utility_action == 'check-backend-status'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/backend_key
+          chmod 600 ~/.ssh/backend_key
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config << EOF
+          Host backend-staging
+            HostName ${{ secrets.STAGING_HOST }}
+            User ${{ secrets.STAGING_USER }}
+            IdentityFile ~/.ssh/backend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+      
+      - name: Check Backend Status
+        run: |
+          ssh -F ~/.ssh/config backend-staging << 'EOF'
+            echo "=========================================="
+            echo "VERIFICATION DU BACKEND"
+            echo "=========================================="
+            echo ""
+            
+            echo "1. Conteneurs Docker:"
+            docker ps | grep backend || echo "   ERROR: Backend non demarre"
+            echo ""
+            
+            echo "2. Port 8081:"
+            sudo ss -tlnp | grep 8081 || echo "   ERROR: Port 8081 non utilise"
+            echo ""
+            
+            echo "3. Test local (health):"
+            curl -s -o /dev/null -w "   HTTP Status: %{http_code}\n" http://localhost:8081/actuator/health || echo "   ERROR: Backend non accessible localement"
+            echo ""
+            
+            echo "4. Test local (prometheus):"
+            curl -s http://localhost:8081/actuator/prometheus | head -5 || echo "   ERROR: Metriques Prometheus non accessibles"
+            echo ""
+            
+            echo "5. Logs recents (dernieres 50 lignes avec erreurs):"
+            docker logs hotel-ticket-hub-backend-staging --tail=50 2>&1 | grep -i "error\|exception\|500\|actuator\|prometheus" | tail -20 || docker logs hotel-ticket-hub-backend-staging --tail=20 2>&1 | tail -10
+            echo ""
+            
+            echo "6. Test detaille Prometheus endpoint:"
+            curl -v http://localhost:8081/actuator/prometheus 2>&1 | head -30 || echo "   ERROR: Erreur lors du test"
+            echo ""
+            
+            echo "7. Configuration Docker Compose:"
+            if [ -f /opt/hotel-ticket-hub-backend-staging/docker-compose.yml ]; then
+              echo "   OK: docker-compose.yml existe"
+              grep -A 2 "ports:" /opt/hotel-ticket-hub-backend-staging/docker-compose.yml | head -3 || echo "   WARNING: Configuration ports non trouvee"
+            else
+              echo "   ERROR: docker-compose.yml non trouve"
+            fi
+            echo ""
+            
+            echo "=========================================="
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/backend_key ~/.ssh/config ~/.ssh/known_hosts
+
+  add-oumayma-key-backend:
+    name: Ajouter la cle Oumayma sur la VM Backend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.utility_action == 'add-oumayma-key-backend'
+    
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/backend_key
+          chmod 600 ~/.ssh/backend_key
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config << EOF
+          Host backend-staging
+            HostName ${{ secrets.STAGING_HOST }}
+            User ${{ secrets.STAGING_USER }}
+            IdentityFile ~/.ssh/backend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+      
+      - name: Add Oumayma Public Key
+        run: |
+          ssh -F ~/.ssh/config backend-staging << EOF
+            echo "=== Ajout de la cle publique ==="
+            echo "${{ github.event.inputs.public_key }}" >> ~/.ssh/authorized_keys
+            chmod 600 ~/.ssh/authorized_keys
+            echo "OK: Cle ajoutee avec succes"
+            echo ""
+            echo "=== Cles autorisees ==="
+            tail -3 ~/.ssh/authorized_keys
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/backend_key ~/.ssh/config ~/.ssh/known_hosts
+
+  add-oumayma-key-frontend:
+    name: Ajouter la cle Oumayma sur la VM Frontend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.utility_action == 'add-oumayma-key-frontend'
+    
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          if [ -n "${{ secrets.FRONTEND_SSH_PRIVATE_KEY }}" ]; then
+            echo "${{ secrets.FRONTEND_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          else
+            echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/frontend_key
+          fi
+          chmod 600 ~/.ssh/frontend_key
+          ssh-keyscan -H 51.21.196.104 >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config << EOF
+          Host frontend-staging
+            HostName 51.21.196.104
+            User ubuntu
+            IdentityFile ~/.ssh/frontend_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 10
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+      
+      - name: Add Oumayma Public Key
+        run: |
+          ssh -F ~/.ssh/config frontend-staging << EOF
+            echo "=== Ajout de la cle publique ==="
+            echo "${{ secrets.OUMAYMA_SSH_PUBLIC_KEY }}" >> ~/.ssh/authorized_keys
+            chmod 600 ~/.ssh/authorized_keys
+            echo "OK: Cle ajoutee avec succes"
+            echo ""
+            echo "=== Cles autorisees ==="
+            tail -3 ~/.ssh/authorized_keys
+          EOF
+        continue-on-error: true
+      
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/frontend_key ~/.ssh/config ~/.ssh/known_hosts
 
