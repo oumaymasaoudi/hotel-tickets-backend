@@ -1115,7 +1115,9 @@ jobs:
           # cache-dependency-path: package-lock.json
 
       - name: Install semantic-release dependencies
-        run: npm ci || npm install
+        run: |
+          npm install
+          npm list @semantic-release/exec || npm install @semantic-release/exec
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
