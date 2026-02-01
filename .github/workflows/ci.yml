@@ -1117,9 +1117,6 @@ jobs:
       - name: Install semantic-release dependencies
         run: npm install
 
-      - name: Fix permissions for semantic-release
-        run: chmod +x node_modules/.bin/semantic-release || true
-
       - name: Setup JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
@@ -1129,5 +1126,5 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node node_modules/.bin/semantic-release
+        run: npm run semantic-release
 
