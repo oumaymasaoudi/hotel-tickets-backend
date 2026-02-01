@@ -1115,7 +1115,7 @@ jobs:
           # cache-dependency-path: package-lock.json
 
       - name: Install semantic-release dependencies
-        run: npm install
+        run: npm ci || npm install
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -1126,5 +1126,5 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node node_modules/semantic-release/bin/semantic-release.js
+        run: npx --yes semantic-release
 
