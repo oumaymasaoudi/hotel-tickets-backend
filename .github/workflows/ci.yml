@@ -240,7 +240,7 @@ jobs:
     name: Backend - SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: [lint, test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) || github.event_name == 'schedule'
     continue-on-error: true
     
     steps:
