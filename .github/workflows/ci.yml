@@ -453,9 +453,22 @@ jobs:
           if-no-files-found: ignore
         continue-on-error: true
 
-      - name: Upload Dependency Check results to GitHub Security (SARIF)
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Check if SARIF file exists
+        id: check_sarif
         if: always()
+        run: |
+          if [ -f "reports/dependency-check-report.sarif" ]; then
+            echo "sarif_exists=true" >> $GITHUB_OUTPUT
+            echo "SARIF file found"
+          else
+            echo "sarif_exists=false" >> $GITHUB_OUTPUT
+            echo "SARIF file not found (this is normal if no vulnerabilities were found)"
+          fi
+        continue-on-error: true
+
+      - name: Upload Dependency Check results to GitHub Security (SARIF)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && steps.check_sarif.outputs.sarif_exists == 'true'
         with:
           sarif_file: reports/dependency-check-report.sarif
         continue-on-error: true
@@ -481,7 +494,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
