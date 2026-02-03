@@ -3,6 +3,7 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
+    # Note: '**' signifie tous les fichiers du repo (backend est à la racine)
     paths:
       - '**'
       - '.github/workflows/**'
@@ -47,11 +48,11 @@ jobs:
           cache: 'maven'
       
       - name: Run Maven Checkstyle
-        run: mvn checkstyle:check
+        run: mvn -B checkstyle:check
         continue-on-error: true
       
       - name: Run Maven SpotBugs
-        run: mvn spotbugs:spotbugs -Duser.language=en -Duser.country=US
+        run: mvn -B spotbugs:spotbugs -Duser.language=en -Duser.country=US
         continue-on-error: true
         env:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
@@ -95,7 +96,7 @@ jobs:
           cache: 'maven'
       
       - name: Run tests with JaCoCo agent
-        run: mvn clean test -DskipITs
+        run: mvn -B clean test -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -142,7 +143,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: test-classes-jacoco
-          path: target
+          path: .
       
       - name: Generate coverage report
         run: mvn -B jacoco:report
@@ -159,6 +160,20 @@ jobs:
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
         continue-on-error: true
+      
+      - name: Verify JaCoCo XML report exists
+        run: |
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "ERROR: jacoco.xml not found! Generating report..."
+            mvn -B jacoco:report
+            if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+              echo "ERROR: jacoco.xml still not found after regeneration"
+              exit 1
+            fi
+          fi
+          echo " jacoco.xml found: $(ls -lh target/site/jacoco/jacoco.xml)"
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
@@ -198,7 +213,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven
-        run: mvn clean package -DskipTests -DskipITs
+        run: mvn -B clean package -DskipTests -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -340,7 +355,7 @@ jobs:
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
-          format: 'HTML'
+          format: 'ALL'
           args: >
             --failOnCVSS 7
             --suppression owasp-dependency-check-suppressions.xml
@@ -348,7 +363,7 @@ jobs:
             --enableExperimental
         continue-on-error: true
 
-      - name: Upload Dependency Check results
+      - name: Upload Dependency Check results (HTML)
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -356,6 +371,14 @@ jobs:
           path: reports/dependency-check-report.html
           retention-days: 7
           if-no-files-found: ignore
+        continue-on-error: true
+
+      - name: Upload Dependency Check results to GitHub Security (SARIF)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+        continue-on-error: true
 
   security-lint:
     name: Backend - Security Linting (Trivy)
@@ -391,6 +414,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    concurrency:
+      group: docker-build-backend
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -641,7 +667,15 @@ jobs:
             fi
             
             echo "Connecting to GitHub Container Registry..."
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Utiliser GHCR_TOKEN si défini (PAT), sinon GITHUB_TOKEN
+            if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
+              # PAT avec username explicite si défini, sinon github.actor
+              GHCR_USER="${GHCR_USERNAME:-${{ github.actor }}}"
+              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            else
+              # Fallback sur GITHUB_TOKEN (automatique)
+              echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            fi
             
             echo "Pulling Docker image..."
             export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:develop
@@ -1128,5 +1162,5 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --yes semantic-release
+        run: npm run semantic-release
 

@@ -187,6 +187,13 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <!-- Garantir la génération du format XML pour Codecov et SonarCloud -->
+                            <formats>
+                                <format>XML</format>
+                                <format>HTML</format>
+                            </formats>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>check</id>
