@@ -1230,10 +1230,57 @@ jobs:
 
       - name: Install semantic-release dependencies
         run: |
-          npm install
-          npm list @semantic-release/exec || npm install @semantic-release/exec
+          # Clean install to avoid corrupted node_modules
+          echo "Cleaning previous installations..."
+          rm -rf node_modules
+          
+          # Install dependencies with legacy peer deps to avoid conflicts
+          echo "Installing dependencies..."
+          npm install --legacy-peer-deps --no-audit --no-fund
+          
+          # Verify and reinstall critical dependencies if needed
+          echo "Verifying critical dependencies..."
+          if ! npm list semantic-release > /dev/null 2>&1; then
+            echo "Reinstalling semantic-release..."
+            npm install semantic-release --legacy-peer-deps --no-audit --no-fund
+          fi
+          
+          if ! npm list @semantic-release/exec > /dev/null 2>&1; then
+            echo "Installing @semantic-release/exec..."
+            npm install @semantic-release/exec --legacy-peer-deps --no-audit --no-fund
+          fi
+          
+          # Verify yargs is properly installed (it's a dependency of semantic-release)
+          if ! npm list yargs > /dev/null 2>&1; then
+            echo "Reinstalling yargs..."
+            npm install yargs --legacy-peer-deps --no-audit --no-fund
+          fi
+          
+          # Rebuild node_modules to fix any missing files
+          echo "Rebuilding node_modules..."
+          npm rebuild --legacy-peer-deps || true
+          
           # Ensure binaries have execute permissions
+          echo "Setting execute permissions..."
           chmod +x node_modules/.bin/* 2>/dev/null || true
+          
+          # Verify semantic-release binary exists and is executable
+          if [ ! -f "node_modules/.bin/semantic-release" ]; then
+            echo "ERROR: semantic-release binary not found"
+            ls -la node_modules/.bin/ | head -20
+            exit 1
+          fi
+          
+          # Verify yargs module structure
+          if [ ! -f "node_modules/yargs/build/lib/yargs-factory.js" ]; then
+            echo "WARNING: yargs-factory.js not found, reinstalling yargs..."
+            npm uninstall yargs
+            npm install yargs --legacy-peer-deps --no-audit --no-fund
+          fi
+          
+          echo "✓ Dependencies installed successfully"
+          echo "Verifying installation..."
+          npm list semantic-release yargs @semantic-release/exec
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
