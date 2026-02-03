@@ -599,58 +599,105 @@ jobs:
         continue-on-error: true
         id: ssh_test
         run: |
-          echo "Testing SSH connection..."
-          echo "Host: ${{ secrets.STAGING_HOST }}"
-          echo "User: ${{ secrets.STAGING_USER }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "SSH Connection Diagnostic"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
-          echo "Checking if secrets are set..."
-          if [ -z "${{ secrets.STAGING_HOST }}" ] || [ -z "${{ secrets.STAGING_USER }}" ] || [ -z "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" ]; then
-            echo "ERROR: One or more secrets are missing"
-            echo "Required secrets: STAGING_HOST, STAGING_USER, STAGING_SSH_PRIVATE_KEY"
-            echo "::error::Missing required secrets for SSH connection"
+          echo "Checking if secrets are configured..."
+          if [ -z "${{ secrets.STAGING_HOST }}" ]; then
+            echo "❌ ERROR: STAGING_HOST secret is not set"
+            echo "   → Go to: Settings > Secrets and variables > Actions"
+            echo "   → Add secret: STAGING_HOST = your-server-ip-or-domain"
+            echo "ssh_ok=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          echo "OK: Secrets are set"
+          if [ -z "${{ secrets.STAGING_USER }}" ]; then
+            echo "❌ ERROR: STAGING_USER secret is not set"
+            echo "   → Go to: Settings > Secrets and variables > Actions"
+            echo "   → Add secret: STAGING_USER = your-ssh-username (usually 'ubuntu' or 'ec2-user')"
+            echo "ssh_ok=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          if [ -z "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: STAGING_SSH_PRIVATE_KEY secret is not set"
+            echo "   → Go to: Settings > Secrets and variables > Actions"
+            echo "   → Add secret: STAGING_SSH_PRIVATE_KEY = your-private-key-content"
+            echo "ssh_ok=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✓ All required secrets are configured"
           echo ""
-          echo "Testing network connectivity (ping)..."
-          if ping -c 2 -W 5 ${{ secrets.STAGING_HOST }} > /dev/null 2>&1; then
-            echo "OK: VM responds to ping"
+          echo "Connection details:"
+          echo "  Host: ${{ secrets.STAGING_HOST }}"
+          echo "  User: ${{ secrets.STAGING_USER }}"
+          echo "  Key: [configured]"
+          echo ""
+          echo "Testing network connectivity..."
+          if ping -c 3 -W 5 ${{ secrets.STAGING_HOST }} 2>&1; then
+            echo "✓ Host is reachable via ping"
           else
-            echo "WARNING: VM does not respond to ping (may be blocked by Security Group)"
+            echo "⚠ WARNING: Host does not respond to ping"
+            echo "  This might be normal if ICMP is blocked, but SSH should still work"
           fi
           echo ""
-          echo "Testing SSH connection..."
-          if timeout 30 ssh -F ~/.ssh/config -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes backend-staging "echo 'SSH connection successful'" 2>&1; then
-            echo "OK: SSH connection successful"
+          echo "Testing SSH connection (timeout: 30s)..."
+          SSH_OUTPUT=$(timeout 30 ssh -F ~/.ssh/config \
+            -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=no \
+            -o BatchMode=yes \
+            -o LogLevel=ERROR \
+            -v backend-staging "echo 'SSH_SUCCESS'" 2>&1) || SSH_EXIT_CODE=$?
+          
+          if echo "$SSH_OUTPUT" | grep -q "SSH_SUCCESS"; then
+            echo "✓ SSH connection successful!"
             echo "ssh_ok=true" >> $GITHUB_OUTPUT
           else
-            SSH_EXIT_CODE=$?
             echo ""
-            echo "=========================================="
-            echo "ERROR: SSH connection failed (exit code: $SSH_EXIT_CODE)"
-            echo "=========================================="
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ SSH CONNECTION FAILED"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            echo "Possible causes:"
-            echo "1. AWS Security Group blocks SSH connections"
-            echo "   → Solution: Add inbound rule for SSH (port 22) from 0.0.0.0/0"
-            echo "   → AWS Console: EC2 > Security Groups > [Your SG] > Inbound rules > Add rule"
+            echo "Exit code: ${SSH_EXIT_CODE:-unknown}"
             echo ""
-            echo "2. VM IP address changed or instance stopped"
-            echo "   → Solution: Verify instance is running and IP is correct"
-            echo "   → Current IP in secret: ${{ secrets.STAGING_HOST }}"
+            echo "SSH output:"
+            echo "$SSH_OUTPUT" | tail -20
             echo ""
-            echo "3. SSH key incorrect or expired"
-            echo "   → Solution: Verify STAGING_SSH_PRIVATE_KEY secret is correct"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "TROUBLESHOOTING STEPS:"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            echo "Quick fix via AWS Console:"
-            echo "1. Go to https://console.aws.amazon.com/ec2"
-            echo "2. Find instance with IP ${{ secrets.STAGING_HOST }}"
-            echo "3. Open Security Group > Inbound rules"
-            echo "4. Add rule: Type=SSH, Port=22, Source=0.0.0.0/0"
+            echo "1. VERIFY SECRETS IN GITHUB:"
+            echo "   → Repository > Settings > Secrets and variables > Actions"
+            echo "   → Ensure these secrets exist:"
+            echo "     • STAGING_HOST (IP or domain)"
+            echo "     • STAGING_USER (username)"
+            echo "     • STAGING_SSH_PRIVATE_KEY (full private key)"
             echo ""
-            echo "See scripts/fix-github-actions-ssh.md for detailed troubleshooting"
+            echo "2. CHECK AWS SECURITY GROUP:"
+            echo "   → AWS Console > EC2 > Security Groups"
+            echo "   → Find the Security Group attached to your instance"
+            echo "   → Inbound Rules > Add rule:"
+            echo "     Type: SSH"
+            echo "     Port: 22"
+            echo "     Source: 0.0.0.0/0 (or GitHub Actions IP ranges)"
+            echo ""
+            echo "3. VERIFY INSTANCE STATUS:"
+            echo "   → AWS Console > EC2 > Instances"
+            echo "   → Ensure instance is 'running'"
+            echo "   → Verify Public IP matches STAGING_HOST secret"
+            echo ""
+            echo "4. TEST SSH LOCALLY:"
+            echo "   ssh -i your-key.pem ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}"
+            echo ""
+            echo "5. VERIFY SSH KEY FORMAT:"
+            echo "   → STAGING_SSH_PRIVATE_KEY should start with:"
+            echo "     '-----BEGIN OPENSSH PRIVATE KEY-----' or"
+            echo "     '-----BEGIN RSA PRIVATE KEY-----'"
+            echo "   → Include the BEGIN and END lines"
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ssh_ok=false" >> $GITHUB_OUTPUT
-            echo "::error::SSH connection failed. Check Security Group configuration."
+            echo "::error::SSH connection failed. Check Security Group and secrets configuration."
             exit 1
           fi
 
