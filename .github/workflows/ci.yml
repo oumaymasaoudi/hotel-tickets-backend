@@ -100,6 +100,21 @@ jobs:
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
+      - name: Verify JaCoCo execution data was generated
+        run: |
+          if [ ! -f "target/jacoco.exec" ]; then
+            echo "ERROR: JaCoCo execution data (target/jacoco.exec) was not generated!"
+            echo "This usually means JaCoCo is not properly configured in pom.xml"
+            echo "Checking target directory..."
+            ls -la target/ || echo "target/ directory does not exist"
+            echo "Checking for JaCoCo plugin configuration..."
+            grep -r "jacoco-maven-plugin" pom.xml || echo "JaCoCo plugin not found in pom.xml"
+            exit 1
+          else
+            echo "✓ JaCoCo execution data generated: $(ls -lh target/jacoco.exec)"
+          fi
+        continue-on-error: false
+      
       - name: Upload test reports
         uses: actions/upload-artifact@v4
         if: always()
@@ -145,8 +160,87 @@ jobs:
           name: test-classes-jacoco
           path: .
       
+      - name: Verify JaCoCo execution data exists
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying JaCoCo execution data"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking for JaCoCo execution data..."
+          
+          # Check if execution data exists in expected location
+          if [ -f "target/jacoco.exec" ]; then
+            echo "✓ JaCoCo execution data found: $(ls -lh target/jacoco.exec)"
+          else
+            echo "ERROR: target/jacoco.exec not found!"
+            echo ""
+            echo "Searching for execution data in other locations..."
+            EXEC_FILE=$(find . -name "jacoco.exec" -type f 2>/dev/null | head -1)
+            if [ -n "$EXEC_FILE" ]; then
+              echo "Found execution data at: $EXEC_FILE"
+              echo "Copying to expected location..."
+              mkdir -p target
+              cp "$EXEC_FILE" target/jacoco.exec
+              echo "✓ Execution data copied to target/jacoco.exec"
+            else
+              echo "No jacoco.exec found anywhere in the workspace"
+              echo ""
+              echo "This usually means:"
+              echo "  1. Tests were not run with JaCoCo agent enabled"
+              echo "  2. JaCoCo plugin is not properly configured in pom.xml"
+              echo "  3. Execution data was not uploaded from test job"
+              echo ""
+              echo "Checking downloaded artifacts structure..."
+              echo "Current directory: $(pwd)"
+              echo "Target directory contents:"
+              ls -la target/ 2>/dev/null || echo "  target/ directory does not exist"
+              echo ""
+              echo "All files in workspace:"
+              find . -type f -name "*.exec" 2>/dev/null || echo "  No .exec files found"
+              exit 1
+            fi
+          fi
+          
+          echo ""
+          echo "Checking for compiled classes..."
+          if [ ! -d "target/classes" ]; then
+            echo "WARNING: target/classes not found, compiling..."
+            mvn -B compile -DskipTests
+          else
+            echo "✓ Compiled classes found"
+          fi
+          
+          if [ ! -d "target/test-classes" ]; then
+            echo "WARNING: target/test-classes not found, compiling tests..."
+            mvn -B test-compile
+          else
+            echo "✓ Test classes found"
+          fi
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
       - name: Generate coverage report
         run: mvn -B jacoco:report
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      - name: Verify JaCoCo XML report exists
+        run: |
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "ERROR: jacoco.xml not found after report generation!"
+            echo "Checking execution data..."
+            ls -lh target/jacoco.exec || echo "jacoco.exec missing"
+            echo "Checking target directory structure..."
+            find target -type f -name "*.xml" || echo "No XML files found"
+            echo "Attempting to regenerate report with verbose output..."
+            mvn -B -X jacoco:report 2>&1 | tail -50
+            if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+              echo "ERROR: jacoco.xml still not found after regeneration"
+              exit 1
+            fi
+          fi
+          echo "✓ jacoco.xml found: $(ls -lh target/site/jacoco/jacoco.xml)"
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -160,20 +254,6 @@ jobs:
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
         continue-on-error: true
-      
-      - name: Verify JaCoCo XML report exists
-        run: |
-          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
-            echo "ERROR: jacoco.xml not found! Generating report..."
-            mvn -B jacoco:report
-            if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
-              echo "ERROR: jacoco.xml still not found after regeneration"
-              exit 1
-            fi
-          fi
-          echo " jacoco.xml found: $(ls -lh target/site/jacoco/jacoco.xml)"
-        env:
-          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
