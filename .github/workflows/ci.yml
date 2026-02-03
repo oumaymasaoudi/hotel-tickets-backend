@@ -557,6 +557,7 @@ jobs:
     if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     environment: staging
     timeout-minutes: 15  # Augmenté pour gérer les connexions SSH lentes
+    continue-on-error: true  # Ne pas bloquer le pipeline si le déploiement échoue
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
@@ -861,6 +862,26 @@ jobs:
         if: always()
         run: |
           rm -f ~/.ssh/deploy_key ~/.ssh/config ~/.ssh/known_hosts
+      
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "Backend has been deployed to staging server"
+          else
+            echo "⚠️  DEPLOYMENT FAILED (but pipeline continues)"
+            echo ""
+            echo "Common causes:"
+            echo "  • SSH secrets not configured in GitHub"
+            echo "  • AWS Security Group blocking SSH (port 22)"
+            echo "  • Server instance not running or IP changed"
+            echo ""
+            echo "Check the logs above for detailed diagnostics."
+            echo "The pipeline will continue even if deployment fails."
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   # ============================================
   # DEPLOY MONITORING (for develop branch)
@@ -874,6 +895,7 @@ jobs:
     if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     environment: monitoring
     timeout-minutes: 15
+    continue-on-error: true  # Ne pas bloquer le pipeline si le déploiement échoue
     concurrency:
       group: deploy-monitoring
       cancel-in-progress: false
