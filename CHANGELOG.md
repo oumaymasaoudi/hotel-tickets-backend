@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.1...v1.1.2) (2026-02-06)
+
+
+### Bug Fixes
+
+* increase deployment timeout and improve health check retry logic ([5260fe5](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/5260fe5f8b508ccf541b61695c941f542a67cca5))
+
 ## [1.1.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.0...v1.1.1) (2026-02-06)
 
 
