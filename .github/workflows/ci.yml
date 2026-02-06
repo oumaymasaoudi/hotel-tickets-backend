@@ -872,6 +872,21 @@ jobs:
             fi
             
             echo "Backend deployed successfully!"
+            
+            # Vérification finale de l'accessibilité depuis l'extérieur
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Final accessibility check"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Backend URL: http://${{ secrets.STAGING_HOST }}:8081"
+            echo "Health endpoint: http://${{ secrets.STAGING_HOST }}:8081/actuator/health"
+            echo "Prometheus endpoint: http://${{ secrets.STAGING_HOST }}:8081/actuator/prometheus"
+            echo ""
+            echo "⚠️  IMPORTANT: For Prometheus to scrape metrics, ensure:"
+            echo "   1. Security Group allows port 8081 from Monitoring VM IP"
+            echo "   2. Backend container stays running (check with: docker ps)"
+            echo "   3. See scripts/fix-prometheus-connection-refused.md for troubleshooting"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Cleanup SSH
         if: always()
