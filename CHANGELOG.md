@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.0...v1.1.1) (2026-02-06)
+
+
+### Reverts
+
+* Revert "feat: improve backend reliability with auto-restart and monitoring" ([5bd169e](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/5bd169e44584104a36b2824a3ddc65184518f996))
+
 # [1.1.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.0.0...v1.1.0) (2026-02-06)
 
 
