@@ -767,8 +767,8 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          timeout: 300s
-          command_timeout: 120s
+          timeout: 600s  # 10 minutes pour la connexion SSH
+          command_timeout: 300s  # 5 minutes pour le script (pull image + démarrage Spring Boot)
           debug: false
           use_insecure_cipher: false
           script: |
@@ -843,17 +843,32 @@ jobs:
             fi
             
             echo "Container is running (ID: $CONTAINER_ID)"
-            echo "Waiting for Spring Boot to fully start (30s)..."
-            sleep 30
-            
-            echo "Checking application health..."
+            echo "Waiting for Spring Boot to fully start..."
             HEALTH_CHECK_URL="http://localhost:8081/actuator/health"
-            if curl -f -s "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
-              echo "Application is healthy!"
-            else
-              echo "WARNING: Health check failed, but container is running"
+            MAX_RETRIES=12  # 12 tentatives × 10s = 2 minutes max
+            RETRY_COUNT=0
+            HEALTHY=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              sleep 10
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES..."
+              
+              if curl -f -s "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
+                echo "✓ Application is healthy!"
+                HEALTHY=true
+                break
+              else
+                echo "  Application not ready yet, waiting..."
+              fi
+            done
+            
+            if [ "$HEALTHY" = false ]; then
+              echo "WARNING: Health check failed after $MAX_RETRIES attempts, but container is running"
               echo "Recent logs:"
               docker compose logs --tail=50 hotel-ticket-hub-backend-staging || docker logs hotel-ticket-hub-backend-staging --tail=50 2>&1 || true
+              echo "Container status:"
+              docker ps --filter "name=hotel-ticket-hub-backend-staging" || true
             fi
             
             echo "Backend deployed successfully!"
