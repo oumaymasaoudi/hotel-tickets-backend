@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.0.0...v1.1.0) (2026-02-06)
+
+
+### Features
+
+* improve backend reliability with auto-restart and monitoring ([8bb5542](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/8bb554284532cce5919911726f41cbdba6433b8f))
+
 # 1.0.0 (2026-02-03)
 
 
