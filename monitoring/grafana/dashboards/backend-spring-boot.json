@@ -93,11 +93,11 @@
                         "mode": "palette-classic"
                     },
                     "custom": {
-                        "axisLabel": "",
+                        "axisLabel": "Requests per second",
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 20,
+                        "fillOpacity": 30,
                         "gradientMode": "opacity",
                         "lineInterpolation": "smooth",
                         "lineWidth": 2,
@@ -110,6 +110,9 @@
                         "stacking": {
                             "group": "A",
                             "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
                         }
                     },
                     "mappings": [],
@@ -123,7 +126,84 @@
                         ]
                     },
                     "unit": "reqps"
-                }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/200/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "green",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/401/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "yellow",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/403/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "orange",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/404/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "blue",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/5../"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "red",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
             },
             "gridPos": {
                 "h": 8,
@@ -135,25 +215,58 @@
             "options": {
                 "legend": {
                     "calcs": [
+                        "last",
                         "mean",
                         "max"
                     ],
                     "displayMode": "table",
-                    "placement": "bottom"
+                    "placement": "bottom",
+                    "showLegend": true
                 },
                 "tooltip": {
-                    "mode": "multi"
+                    "mode": "multi",
+                    "sort": "desc"
                 }
             },
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\"}[5m])) by (status) or vector(0)",
-                    "legendFormat": "{{status}}",
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"200\"}[1m])) or vector(0)",
+                    "legendFormat": "200 OK",
                     "refId": "A"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"401\"}[1m])) or vector(0)",
+                    "legendFormat": "401 Unauthorized",
+                    "refId": "B"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"403\"}[1m])) or vector(0)",
+                    "legendFormat": "403 Forbidden",
+                    "refId": "C"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"404\"}[1m])) or vector(0)",
+                    "legendFormat": "404 Not Found",
+                    "refId": "D"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"500\"}[1m])) or vector(0)",
+                    "legendFormat": "500 Internal Server Error",
+                    "refId": "E"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=~\"5..\",status!=\"500\"}[1m])) or vector(0)",
+                    "legendFormat": "5xx Other Errors",
+                    "refId": "F"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=~\"4..\",status!~\"401|403|404\"}[1m])) or vector(0)",
+                    "legendFormat": "4xx Other Client Errors",
+                    "refId": "G"
                 }
             ],
-            "title": "HTTP Requests Rate (by Status)",
+            "title": "HTTP Status Codes - Temps Réel",
             "type": "timeseries"
         },
         {
