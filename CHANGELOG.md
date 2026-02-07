@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.1...v1.3.2) (2026-02-07)
+
+
+### Bug Fixes
+
+* update CORS configuration to allow frontend staging URLs ([cd672e0](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/cd672e0ca5b9811b16acdfc2d7f3877ebc24eaa4))
+
 ## [1.3.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.0...v1.3.1) (2026-02-07)
 
 
