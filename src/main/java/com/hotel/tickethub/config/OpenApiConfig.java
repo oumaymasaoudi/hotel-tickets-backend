@@ -16,26 +16,25 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-    @Bean
-    public OpenAPI hotelTicketHubOpenAPI() {
-        return new OpenAPI()
-                .info(new Info()
-                        .title("Hotel Ticket Hub API")
-                        .description("API REST pour la gestion de tickets d'hôtels")
-                        .version("1.0.0")
-                        .contact(new Contact()
-                                .name("Support")
-                                .email("support@tickethotel.com"))
-                        .license(new License()
-                                .name("Proprietary")
-                                .url("https://tickethotel.com")))
-                .servers(List.of(
-                        new Server()
-                                .url("http://localhost:8080")
-                                .description("Serveur de développement"),
-                        new Server()
-                                .url("http://13.49.44.219:8081")
-                                .description("Serveur de staging")));
-    }
+        @Bean
+        public OpenAPI hotelTicketHubOpenAPI() {
+                return new OpenAPI()
+                                .info(new Info()
+                                                .title("Hotel Ticket Hub API")
+                                                .description("API REST pour la gestion de tickets d'hôtels")
+                                                .version("1.0.0")
+                                                .contact(new Contact()
+                                                                .name("Support")
+                                                                .email("support@tickethotel.com"))
+                                                .license(new License()
+                                                                .name("Proprietary")
+                                                                .url("https://tickethotel.com")))
+                                .servers(List.of(
+                                                new Server()
+                                                                .url("http://localhost:8080")
+                                                                .description("Serveur de développement"),
+                                                new Server()
+                                                                .url("http://13.63.15.86:8081")
+                                                                .description("Serveur de staging")));
+        }
 }
-
