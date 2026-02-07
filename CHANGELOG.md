@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.0...v1.3.1) (2026-02-07)
+
+
+### Bug Fixes
+
+* correct typo 'ancible-controller' to 'ansible-controller' in Prometheus config ([c10eae1](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/c10eae1b4e94f013888f03e7a18322c0291a6ad8))
+
 # [1.3.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.2.0...v1.3.0) (2026-02-07)
 
 
