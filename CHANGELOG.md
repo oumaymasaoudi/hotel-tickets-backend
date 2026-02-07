@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.3...v1.2.0) (2026-02-07)
+
+
+### Features
+
+* improve Grafana dashboard for Spring Boot backend with robust queries ([7142f16](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/7142f1611e6a63b53b369fe27f635b15d4d7934a))
+
 ## [1.1.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.2...v1.1.3) (2026-02-07)
 
 
