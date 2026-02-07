@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.2.0...v1.3.0) (2026-02-07)
+
+
+### Features
+
+* replace HTTP requests panel with real-time status codes visualization ([49d6f2f](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/49d6f2fd5f87e134622228fc967fa3f5c6e8a835))
+
 # [1.2.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.3...v1.2.0) (2026-02-07)
 
 
