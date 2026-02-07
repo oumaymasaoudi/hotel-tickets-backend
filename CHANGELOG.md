@@ -1,3 +1,10 @@
+## [1.3.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.2...v1.3.3) (2026-02-07)
+
+
+### Bug Fixes
+
+* update backend IP to 13.63.15.86 in OpenAPI config and test script ([cd533a6](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/cd533a6229c7751f05c27faa151f8e880797e49c))
+
 ## [1.3.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.1...v1.3.2) (2026-02-07)
 
 
