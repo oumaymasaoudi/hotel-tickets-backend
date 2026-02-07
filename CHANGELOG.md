@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.2...v1.1.3) (2026-02-07)
+
+
+### Bug Fixes
+
+* remove invalid metrics configuration causing Spring Boot startup failure ([b8f004e](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/b8f004e2f7d0cdc682a91a0e24d53715918f4d2b))
+
 ## [1.1.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.1.1...v1.1.2) (2026-02-06)
 
 
