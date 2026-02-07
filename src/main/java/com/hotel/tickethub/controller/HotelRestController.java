@@ -20,7 +20,12 @@ import java.util.UUID;
         "http://localhost:8080",
         "http://localhost:8081",
         "http://localhost:5173",
-        "http://192.168.58.1:5173"
+        "http://192.168.58.1:5173",
+        "http://13.50.221.51",
+        "http://13.50.221.51:80",
+        "http://13.50.221.51:8080",
+        "https://13.50.221.51",
+        "https://13.50.221.51:443"
 })
 public class HotelRestController {
 
