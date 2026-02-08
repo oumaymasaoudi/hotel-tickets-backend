@@ -1,3 +1,18 @@
+# [1.4.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.5...v1.4.0) (2026-02-08)
+
+
+### Bug Fixes
+
+* add comprehensive VM fixes for database and API issues ([05146dc](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/05146dcba78056604c3da36d87e8eee664aacb8a))
+* add missing SubscriptionPlan import in HotelService ([2e45dd5](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/2e45dd575560321f4ebbfe64263236f322669d5f))
+* comprehensive fixes for database and API issues ([e965401](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/e965401c38997e8cc0456a698f7f977c0410adbf))
+* correct PowerShell script syntax ([905442a](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/905442a5b551f358950113de189c41497bd86818))
+
+
+### Features
+
+* improve Swagger/OpenAPI configuration with JWT support ([0dea11d](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/0dea11d115b01881eaa1ef0fb17e60f39b187ece))
+
 ## [1.3.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.4...v1.3.5) (2026-02-08)
 
 
