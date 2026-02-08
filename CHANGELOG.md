@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.8.0...v1.8.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* update Loki config to use tsdb instead of deprecated boltdb-shipper ([f897bf0](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/f897bf09e02676516233c3e91d8e88bbfc8fd072))
+
 # [1.8.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.7.0...v1.8.0) (2026-02-08)
 
 
