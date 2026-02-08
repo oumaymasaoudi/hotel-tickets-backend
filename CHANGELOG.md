@@ -1,3 +1,10 @@
+## [1.3.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.3...v1.3.4) (2026-02-08)
+
+
+### Bug Fixes
+
+* add error handling and logging to hotels/public endpoint to debug 400 error ([5315a3c](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/5315a3cfcf529426f492d216ba4f185515b69d9c))
+
 ## [1.3.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.2...v1.3.3) (2026-02-07)
 
 
