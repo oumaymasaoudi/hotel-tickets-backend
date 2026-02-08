@@ -1091,41 +1091,12 @@ jobs:
             fi
             echo "Configuration files found"
             
-            echo "Stopping existing services..."
-            docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
-            
-            # Nettoyer complètement : arrêter tous les conteneurs monitoring
-            echo "Cleaning up monitoring containers..."
-            for container in prometheus grafana alertmanager node-exporter cadvisor; do
-              docker ps -a --filter "name=$container" --format "{{.ID}}" | while read id; do
-                [ -n "$id" ] && docker rm -f "$id" 2>/dev/null || true
-              done
-            done
-            
-            # Supprimer le réseau existant (forcer si nécessaire)
-            echo "Removing monitoring-network..."
-            # Essayer plusieurs fois avec différentes méthodes
-            for i in 1 2 3; do
-              if docker network ls | grep -q monitoring-network; then
-                echo "  Attempt $i: Removing network..."
-                docker network rm monitoring-network 2>/dev/null && break || {
-                  if [ $i -eq 1 ]; then
-                    echo "  WARNING: Network still in use, cleaning unused networks..."
-                    docker network prune -f
-                    sleep 2
-                  elif [ $i -eq 2 ]; then
-                    echo "  Retrying after cleanup..."
-                    sleep 2
-                  else
-                    echo "  WARNING: Cannot remove network, continuing anyway..."
-                  fi
-                }
-              else
-                echo "  Network removed"
-                break
-              fi
-            done
-            sleep 2
+            # OPTIMISATION: Utiliser --force-recreate au lieu de down complet
+            # Cela évite de supprimer les volumes et réseaux inutilement
+            echo "Updating monitoring services (force recreate if needed)..."
+            # --force-recreate recrée les conteneurs avec les nouvelles images
+            # --remove-orphans supprime les conteneurs orphelins
+            # Pas besoin de 'down' complet sauf en cas de problème majeur
             
             echo "Checking disk space..."
             df -h / | tail -1
