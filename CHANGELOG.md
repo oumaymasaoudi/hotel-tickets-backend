@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.5.0...v1.5.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* allow TECHNICIAN role to access tickets by hotel endpoint ([7872f87](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/7872f875aa3c09855547f0b2449319c69bd33a48))
+
 # [1.5.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.4.0...v1.5.0) (2026-02-08)
 
 
