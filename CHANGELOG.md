@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.8.1...v1.8.2) (2026-02-08)
+
+
+### Bug Fixes
+
+* add disk space cleanup script and Prometheus connection troubleshooting ([6523f55](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/6523f55ce11728e71218b4b749718a9943c065a9))
+
 ## [1.8.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.8.0...v1.8.1) (2026-02-08)
 
 
