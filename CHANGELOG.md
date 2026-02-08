@@ -1,3 +1,10 @@
+## [1.3.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.4...v1.3.5) (2026-02-08)
+
+
+### Bug Fixes
+
+* improve error handling in hotels/public endpoint to prevent 500 errors ([5086f7e](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/5086f7e3fbedb1d98ea4fe5080f50a06c40154db))
+
 ## [1.3.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.3...v1.3.4) (2026-02-08)
 
 
