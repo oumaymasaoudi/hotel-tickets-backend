@@ -63,7 +63,7 @@ public class TicketController {
     }
 
     @GetMapping("/hotel/{hotelId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'TECHNICIAN')")
     public ResponseEntity<List<TicketResponse>> getTicketsByHotel(@PathVariable UUID hotelId) {
         try {
             log.debug("Fetching tickets for hotel: {}", hotelId);
