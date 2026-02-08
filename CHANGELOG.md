@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.8.2...v1.9.0) (2026-02-08)
+
+
+### Features
+
+* add Loki datasource provisioning and test guide ([d2ae3c4](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/d2ae3c467bd876980beae9bf2f59212097e51c71))
+
 ## [1.8.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.8.1...v1.8.2) (2026-02-08)
 
 
