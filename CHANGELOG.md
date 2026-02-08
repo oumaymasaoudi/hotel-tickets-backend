@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.5.1...v1.6.0) (2026-02-08)
+
+
+### Features
+
+* add comprehensive API testing script and connection troubleshooting guide ([cb2373e](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/cb2373e06fde9a4dbf39958efb7e5a71452d8ab4))
+
 ## [1.5.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.5.0...v1.5.1) (2026-02-08)
 
 
