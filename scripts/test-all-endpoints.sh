@@ -75,8 +75,16 @@ echo "1. ENDPOINTS PUBLICS (Sans authentification)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Health Check
-test_endpoint "GET" "/actuator/health" "Health Check" "" ""
+# Health Check (sans /api)
+health_response=$(curl -s -w "\n%{http_code}" "$BASE_URL/actuator/health")
+health_code=$(echo "$health_response" | tail -n1)
+if [ "$health_code" -eq 200 ]; then
+    echo -e "${GREEN}✓ Health Check PASS${NC} (HTTP $health_code)"
+    ((PASSED++))
+else
+    echo -e "${RED}✗ Health Check FAIL${NC} (HTTP $health_code)"
+    ((FAILED++))
+fi
 
 # Hôtels publics
 test_endpoint "GET" "/hotels/public" "Récupérer les hôtels publics" "" ""
