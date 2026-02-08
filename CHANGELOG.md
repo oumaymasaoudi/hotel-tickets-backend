@@ -1,3 +1,16 @@
+# [1.8.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.7.0...v1.8.0) (2026-02-08)
+
+
+### Bug Fixes
+
+* remove deprecated shared_store field from Loki config ([0909a38](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/0909a380cafa5cc0054bbb2c8c7240741a9fa64c))
+
+
+### Features
+
+* add script to activate all services and VM status documentation ([b868a9c](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/b868a9c5a5cf703c8f845adc1e295f9ffdc31771))
+* add script to activate all services on all VMs ([fff690d](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/fff690d0047aa986ab1bcb7cebcb24881975af7a))
+
 # [1.7.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.6.1...v1.7.0) (2026-02-08)
 
 
