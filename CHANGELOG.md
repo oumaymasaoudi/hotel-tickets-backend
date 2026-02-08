@@ -1,3 +1,16 @@
+## [1.6.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.6.0...v1.6.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* improve test scripts and add complete VM test ([7258e50](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/7258e500b9acdad2f70b91f3ef54b4e3bd968c7f))
+
+
+### Performance Improvements
+
+* optimize CI/CD pipeline - remove unnecessary docker compose down ([83a5403](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/83a54037b168f7e39fbd849dc0c172c95500ffdd))
+* optimize monitoring deployment - use force-recreate instead of down ([4dca953](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/4dca953ed54c53b29d8901f00ce4eab4d1d57cad))
+
 # [1.6.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.5.1...v1.6.0) (2026-02-08)
 
 
