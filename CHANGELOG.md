@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.4.0...v1.5.0) (2026-02-08)
+
+
+### Features
+
+* add scripts to create SuperAdmin and setup VM completely ([a278254](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/a2782542a8d435cf1f78a9082637b388a172fafc))
+
 # [1.4.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.3.5...v1.4.0) (2026-02-08)
 
 
