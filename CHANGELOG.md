@@ -1,3 +1,11 @@
+# [1.7.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.6.1...v1.7.0) (2026-02-08)
+
+
+### Features
+
+* add comprehensive functionality test script ([26b514d](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/26b514db0952fb26ef5dda009fb8edcfe36c48fd))
+* add comprehensive functionality tests and verification document ([022ceff](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/022ceffa1f7888a9ad127ee049544da93c41991d))
+
 ## [1.6.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.6.0...v1.6.1) (2026-02-08)
 
 
