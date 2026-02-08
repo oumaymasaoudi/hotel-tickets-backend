@@ -35,8 +35,17 @@ public class HotelRestController {
      * GET /api/hotels/public - Récupérer les hôtels publics (sans authentification)
      */
     @GetMapping("/public")
-    public ResponseEntity<List<HotelDTO>> getPublicHotels() {
-        return ResponseEntity.ok(hotelService.getAllHotelsDTO());
+    public ResponseEntity<?> getPublicHotels() {
+        try {
+            List<HotelDTO> hotels = hotelService.getAllHotelsDTO();
+            return ResponseEntity.ok(hotels);
+        } catch (Exception e) {
+            // Log l'erreur pour le débogage
+            System.err.println("Error in getPublicHotels: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"error\": \"" + e.getMessage() + "\"}");
+        }
     }
 
     /**
