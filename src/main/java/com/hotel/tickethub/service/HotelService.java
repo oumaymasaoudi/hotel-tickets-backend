@@ -31,19 +31,19 @@ public class HotelService {
         try {
             List<Hotel> hotels = hotelRepository.findAll();
             log.debug("Found {} hotels in database", hotels.size());
-            
+
             if (hotels == null || hotels.isEmpty()) {
                 log.info("No hotels found in database");
                 return List.of(); // Retourner une liste vide au lieu de null
             }
-            
+
             return hotels.stream()
                     .filter(hotel -> hotel != null) // Filtrer les hôtels null
                     .map(hotel -> {
                         try {
                             return convertToDTO(hotel);
                         } catch (Exception e) {
-                            log.warn("Error converting hotel to DTO: hotelId={}, error={}", 
+                            log.warn("Error converting hotel to DTO: hotelId={}, error={}",
                                     hotel != null ? hotel.getId() : "null", e.getMessage());
                             return null; // Retourner null pour cet hôtel, sera filtré ensuite
                         }
@@ -121,31 +121,30 @@ public class HotelService {
             dto.setAddress(hotel.getAddress());
             dto.setEmail(hotel.getEmail());
             dto.setPhone(hotel.getPhone());
-            
+
             // Gérer le plan de manière sécurisée
             if (hotel.getPlan() != null) {
                 dto.setPlanId(hotel.getPlan().getId());
-                if (hotel.getPlan().getName() != null) {
-                    try {
-                        dto.setPlanName(hotel.getPlan().getName().name());
-                    } catch (Exception e) {
-                        log.warn("Error getting plan name for hotel {}: {}", hotel.getId(), e.getMessage());
-                        dto.setPlanName(null);
-                    }
-                } else {
-                    dto.setPlanName(null);
+                try {
+                    // Utiliser getNameSafe() pour éviter les erreurs avec les plans invalides
+                    SubscriptionPlan planName = hotel.getPlan().getNameSafe();
+                    dto.setPlanName(planName != null ? planName.name() : null);
+                } catch (Exception e) {
+                    log.warn("Error getting plan name for hotel {}: {}", hotel.getId(), e.getMessage());
+                    dto.setPlanName("STARTER"); // Valeur par défaut
                 }
             } else {
                 dto.setPlanId(null);
                 dto.setPlanName(null);
             }
-            
+
             dto.setIsActive(hotel.getIsActive() != null ? hotel.getIsActive() : true);
             return dto;
         } catch (Exception e) {
-            log.error("Error converting hotel to DTO: hotelId={}, error={}", 
+            log.error("Error converting hotel to DTO: hotelId={}, error={}",
                     hotel.getId() != null ? hotel.getId().toString() : "null", e.getMessage(), e);
-            // Retourner null au lieu de lancer une exception pour éviter de bloquer toute la liste
+            // Retourner null au lieu de lancer une exception pour éviter de bloquer toute
+            // la liste
             return null;
         }
     }
