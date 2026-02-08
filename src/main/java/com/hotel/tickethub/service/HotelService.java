@@ -4,6 +4,7 @@ import com.hotel.tickethub.dto.HotelDTO;
 import com.hotel.tickethub.dto.HotelRequest;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.Plan;
+import com.hotel.tickethub.model.enums.SubscriptionPlan;
 import com.hotel.tickethub.repository.HotelRepository;
 import com.hotel.tickethub.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
