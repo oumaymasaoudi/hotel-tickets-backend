@@ -35,16 +35,21 @@ public class HotelRestController {
      * GET /api/hotels/public - Récupérer les hôtels publics (sans authentification)
      */
     @GetMapping("/public")
-    public ResponseEntity<?> getPublicHotels() {
+    public ResponseEntity<List<HotelDTO>> getPublicHotels() {
         try {
             List<HotelDTO> hotels = hotelService.getAllHotelsDTO();
+            // Toujours retourner une liste, même si vide
+            if (hotels == null) {
+                hotels = List.of();
+            }
             return ResponseEntity.ok(hotels);
         } catch (Exception e) {
             // Log l'erreur pour le débogage
             System.err.println("Error in getPublicHotels: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("{\"error\": \"" + e.getMessage() + "\"}");
+            // Retourner une liste vide au lieu d'une erreur 500 pour éviter de casser le
+            // frontend
+            return ResponseEntity.ok(List.of());
         }
     }
 
