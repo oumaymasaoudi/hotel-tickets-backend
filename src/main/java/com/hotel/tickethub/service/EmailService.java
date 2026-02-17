@@ -145,7 +145,7 @@ public class EmailService {
                 formattedDate,
                 hotel.getName(),
                 payment.getAmount().doubleValue(),
-                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                payment.getNextPaymentDate().format(formatter));
 
         sendEmail(hotel.getEmail(), subject, body);
     }
