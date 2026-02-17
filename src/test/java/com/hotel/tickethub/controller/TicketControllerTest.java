@@ -71,8 +71,10 @@ class TicketControllerTest {
 
         // When & Then
         mockMvc.perform(multipart("/api/tickets/public")
-                        .file(ticketPart))
+                        .file(ticketPart)
+                        .contentType(MediaType.MULTIPART_FORM_DATA))
                 .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
@@ -130,8 +132,11 @@ class TicketControllerTest {
 
         // When & Then
         mockMvc.perform(multipart("/api/tickets/public")
-                        .file(ticketPart))
+                        .file(ticketPart)
+                        .contentType(MediaType.MULTIPART_FORM_DATA))
                 .andExpect(status().isBadRequest());
+
+        verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
     }
 
     @Test
