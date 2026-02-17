@@ -1,39 +1,42 @@
 package com.hotel.tickethub.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotel.tickethub.dto.CreateTicketRequest;
 import com.hotel.tickethub.dto.TicketResponse;
-import com.hotel.tickethub.dto.UpdateTicketStatusRequest;
-import com.hotel.tickethub.model.enums.TicketStatus;
 import com.hotel.tickethub.service.TicketService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
+@WebMvcTest(TicketController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class TicketControllerTest {
 
-    @Mock
+    @MockBean
     private TicketService ticketService;
 
-    @InjectMocks
-    private TicketController ticketController;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private TicketResponse ticketResponse;
     private CreateTicketRequest createRequest;
-    private UpdateTicketStatusRequest updateRequest;
 
     @BeforeEach
     void setUp() {
@@ -48,107 +51,125 @@ class TicketControllerTest {
         createRequest.setDescription("Test description");
         createRequest.setClientEmail("test@example.com");
         createRequest.setIsUrgent(false);
-
-        updateRequest = new UpdateTicketStatusRequest();
-        updateRequest.setStatus(TicketStatus.RESOLVED);
     }
 
     @Test
-    void testCreateTicket_Success() {
+    void testCreateTicket_Success() throws Exception {
         // Given
         when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                 .thenReturn(ticketResponse);
 
-        // When
-        ResponseEntity<TicketResponse> response = ticketController.createTicket(createRequest, null);
-
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("TKT-001", response.getBody().getTicketNumber());
-        verify(ticketService, times(1)).createTicket(any(), anyList());
-    }
-
-    @Test
-    void testCreateTicket_WithImages() {
-        // Given
-        List<MultipartFile> images = Arrays.asList(
-                new MockMultipartFile("image1", "test1.jpg", "image/jpeg", "content1".getBytes()),
-                new MockMultipartFile("image2", "test2.jpg", "image/jpeg", "content2".getBytes())
+        String ticketJson = objectMapper.writeValueAsString(createRequest);
+        MockMultipartFile ticketPart = new MockMultipartFile(
+                "ticket", 
+                "ticket.json", 
+                MediaType.APPLICATION_JSON_VALUE, 
+                ticketJson.getBytes()
         );
-        when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
-                .thenReturn(ticketResponse);
 
-        // When
-        ResponseEntity<TicketResponse> response = ticketController.createTicket(createRequest, images);
+        // When & Then
+        mockMvc.perform(multipart("/api/tickets/public")
+                        .file(ticketPart))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        verify(ticketService, times(1)).createTicket(any(), anyList());
+        verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
     }
 
     @Test
-    void testCreateTicket_Error() {
+    void testCreateTicket_WithImages() throws Exception {
+        // Given
+        when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
+                .thenReturn(ticketResponse);
+
+        String ticketJson = objectMapper.writeValueAsString(createRequest);
+        MockMultipartFile ticketPart = new MockMultipartFile(
+                "ticket", 
+                "ticket.json", 
+                MediaType.APPLICATION_JSON_VALUE, 
+                ticketJson.getBytes()
+        );
+        MockMultipartFile image1 = new MockMultipartFile(
+                "images", 
+                "test1.jpg", 
+                "image/jpeg", 
+                "content1".getBytes()
+        );
+        MockMultipartFile image2 = new MockMultipartFile(
+                "images", 
+                "test2.jpg", 
+                "image/jpeg", 
+                "content2".getBytes()
+        );
+
+        // When & Then
+        mockMvc.perform(multipart("/api/tickets/public")
+                        .file(ticketPart)
+                        .file(image1)
+                        .file(image2))
+                .andExpect(status().isOk());
+
+        verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
+    }
+
+    @Test
+    void testCreateTicket_Error() throws Exception {
         // Given
         when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                 .thenThrow(new RuntimeException("Error"));
 
-        // When
-        ResponseEntity<TicketResponse> response = ticketController.createTicket(createRequest, null);
+        String ticketJson = objectMapper.writeValueAsString(createRequest);
+        MockMultipartFile ticketPart = new MockMultipartFile(
+                "ticket", 
+                "ticket.json", 
+                MediaType.APPLICATION_JSON_VALUE, 
+                ticketJson.getBytes()
+        );
 
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        // When & Then
+        mockMvc.perform(multipart("/api/tickets/public")
+                        .file(ticketPart))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
-    void testGetTicketByNumber_Success() {
+    void testGetTicketByNumber_Success() throws Exception {
         // Given
         String ticketNumber = "TKT-001";
         when(ticketService.getTicketByNumber(ticketNumber)).thenReturn(ticketResponse);
 
-        // When
-        ResponseEntity<TicketResponse> response = ticketController.getTicketByNumber(ticketNumber);
+        // When & Then
+        mockMvc.perform(get("/api/tickets/public/{ticketNumber}", ticketNumber))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
         verify(ticketService, times(1)).getTicketByNumber(ticketNumber);
     }
 
     @Test
-    void testGetTicketsByEmail_Success() {
+    void testGetTicketsByEmail_Success() throws Exception {
         // Given
         String email = "test@example.com";
         List<TicketResponse> tickets = Arrays.asList(ticketResponse);
         when(ticketService.getTicketsByEmail(email)).thenReturn(tickets);
 
-        // When
-        ResponseEntity<List<TicketResponse>> response = ticketController.getTicketsByEmail(email);
+        // When & Then
+        mockMvc.perform(get("/api/tickets/public/email/{email}", email))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ticketNumber").value("TKT-001"));
 
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals(1, response.getBody().size());
         verify(ticketService, times(1)).getTicketsByEmail(email);
     }
 
     @Test
-    void testGetTicketsByEmail_Empty() {
+    void testGetTicketsByEmail_Empty() throws Exception {
         // Given
         String email = "empty@example.com";
         when(ticketService.getTicketsByEmail(email)).thenReturn(Collections.emptyList());
 
-        // When
-        ResponseEntity<List<TicketResponse>> response = ticketController.getTicketsByEmail(email);
-
-        // Then
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue(response.getBody().isEmpty());
+        // When & Then
+        mockMvc.perform(get("/api/tickets/public/email/{email}", email))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
     }
 }
