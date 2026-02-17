@@ -43,8 +43,11 @@ class TicketControllerTest {
         ticketResponse.setDescription("Test ticket");
 
         createRequest = new CreateTicketRequest();
+        createRequest.setHotelId(UUID.randomUUID());
+        createRequest.setCategoryId(UUID.randomUUID());
         createRequest.setDescription("Test description");
         createRequest.setClientEmail("test@example.com");
+        createRequest.setIsUrgent(false);
 
         updateRequest = new UpdateTicketStatusRequest();
         updateRequest.setStatus(TicketStatus.RESOLVED);
