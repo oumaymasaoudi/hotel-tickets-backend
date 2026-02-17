@@ -19,39 +19,39 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-    @Bean
-    public OpenAPI hotelTicketHubOpenAPI() {
-        final String securitySchemeName = "bearerAuth";
-        
-        return new OpenAPI()
-                .info(new Info()
-                        .title("Hotel Ticket Hub API")
-                        .description("API REST complète pour la gestion de tickets d'hôtels. " +
-                                "Cette API permet de gérer les hôtels, utilisateurs, tickets, paiements et abonnements.")
-                        .version("1.0.0")
-                        .contact(new Contact()
-                                .name("Support Technique")
-                                .email("support@tickethotel.com")
-                                .url("https://tickethotel.com"))
-                        .license(new License()
-                                .name("Proprietary")
-                                .url("https://tickethotel.com/license")))
-                .servers(List.of(
-                        new Server()
-                                .url("http://localhost:8080")
-                                .description("Serveur de développement local"),
-                        new Server()
-                                .url("http://13.63.15.86:8081")
-                                .description("Serveur de staging")))
-                .addSecurityItem(new SecurityRequirement()
-                        .addList(securitySchemeName))
-                .components(new Components()
-                        .addSecuritySchemes(securitySchemeName,
-                                new SecurityScheme()
-                                        .name(securitySchemeName)
-                                        .type(SecurityScheme.Type.HTTP)
-                                        .scheme("bearer")
-                                        .bearerFormat("JWT")
-                                        .description("JWT token obtenu via /api/auth/login")));
-    }
+        @Bean
+        public OpenAPI hotelTicketHubOpenAPI() {
+                final String securitySchemeName = "bearerAuth";
+
+                return new OpenAPI()
+                                .info(new Info()
+                                                .title("Hotel Ticket Hub API")
+                                                .description("API REST complète pour la gestion de tickets d'hôtels. " +
+                                                                "Cette API permet de gérer les hôtels, utilisateurs, tickets, paiements et abonnements.")
+                                                .version("1.0.0")
+                                                .contact(new Contact()
+                                                                .name("Support Technique")
+                                                                .email("support@tickethotel.com")
+                                                                .url("https://tickethotel.com"))
+                                                .license(new License()
+                                                                .name("Proprietary")
+                                                                .url("https://tickethotel.com/license")))
+                                .servers(List.of(
+                                                new Server()
+                                                                .url("http://localhost:8080")
+                                                                .description("Serveur de développement local"),
+                                                new Server()
+                                                                .url("http://13.63.15.86:8081")
+                                                                .description("Serveur de staging")))
+                                .addSecurityItem(new SecurityRequirement()
+                                                .addList(securitySchemeName))
+                                .components(new Components()
+                                                .addSecuritySchemes(securitySchemeName,
+                                                                new SecurityScheme()
+                                                                                .name(securitySchemeName)
+                                                                                .type(SecurityScheme.Type.HTTP)
+                                                                                .scheme("bearer")
+                                                                                .bearerFormat("JWT")
+                                                                                .description("JWT token obtenu via /api/auth/login")));
+        }
 }
