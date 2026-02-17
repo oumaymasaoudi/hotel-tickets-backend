@@ -28,6 +28,7 @@ import java.util.Optional;
 public class EmailService {
 
     private static final String LOG_NO_EMAIL_CONFIGURED = "No email configured for hotel: {}";
+    private static final String DATE_FORMAT_PATTERN = "dd/MM/yyyy";
 
     private final Optional<JavaMailSender> mailSender;
 
@@ -48,20 +49,26 @@ public class EmailService {
         }
 
         String subject = "Rappel de paiement - " + hotel.getName();
-        String body = String.format(
-                "Bonjour,\n\n" +
-                        "Ceci est un rappel que votre prochain paiement est prévu le %s.\n\n" +
-                        "Détails:\n" +
-                        "- Hôtel: %s\n" +
-                        "- Montant: %.2f €\n" +
-                        "- Date d'échéance: %s\n\n" +
-                        "Veuillez régulariser votre paiement pour continuer à bénéficier de nos services.\n\n" +
-                        "Cordialement,\n" +
-                        "L'équipe Hotel Ticket Hub",
-                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(DATE_FORMAT_PATTERN);
+        String formattedDate = payment.getNextPaymentDate().format(formatter);
+        String body = String.format("""
+                Bonjour,
+                
+                Ceci est un rappel que votre prochain paiement est prévu le %s.
+                
+                Détails:
+                - Hôtel: %s
+                - Montant: %.2f €
+                - Date d'échéance: %s
+                
+                Veuillez régulariser votre paiement pour continuer à bénéficier de nos services.
+                
+                Cordialement,
+                L'équipe Hotel Ticket Hub""",
+                formattedDate,
                 hotel.getName(),
                 payment.getAmount().doubleValue(),
-                payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                formattedDate);
 
         sendEmail(hotel.getEmail(), subject, body);
     }
@@ -79,28 +86,33 @@ public class EmailService {
         String subject = String.format("Rapport %s - %s", reportType, hotel.getName());
 
         StringBuilder body = new StringBuilder();
-        body.append("Bonjour,\n\n");
-        body.append(String.format("Voici votre rapport %s pour la période du %s au %s.\n\n",
+        body.append("Bonjour,%n%n");
+        body.append(String.format("Voici votre rapport %s pour la période du %s au %s.%n%n",
                 reportType,
                 ((Map<?, ?>) report.get("period")).get("start"),
                 ((Map<?, ?>) report.get("period")).get("end")));
 
-        body.append("Statistiques des tickets:\n");
-        body.append(String.format("- Total: %d\n", report.get("totalTickets")));
-        body.append(String.format("- Ouverts: %d\n", report.get("openTickets")));
-        body.append(String.format("- En cours: %d\n", report.get("inProgressTickets")));
-        body.append(String.format("- Résolus: %d\n", report.get("resolvedTickets")));
-        body.append(String.format("- Urgents: %d\n", report.get("urgentTickets")));
+        body.append("Statistiques des tickets:%n");
+        body.append(String.format("- Total: %d%n", 
+                ((Number) report.get("totalTickets")).intValue()));
+        body.append(String.format("- Ouverts: %d%n", 
+                ((Number) report.get("openTickets")).intValue()));
+        body.append(String.format("- En cours: %d%n", 
+                ((Number) report.get("inProgressTickets")).intValue()));
+        body.append(String.format("- Résolus: %d%n", 
+                ((Number) report.get("resolvedTickets")).intValue()));
+        body.append(String.format("- Urgents: %d%n", 
+                ((Number) report.get("urgentTickets")).intValue()));
 
         if (report.containsKey("averageResolutionTimeHours")) {
-            body.append(String.format("- Temps moyen de résolution: %.2f heures\n",
-                    report.get("averageResolutionTimeHours")));
+            body.append(String.format("- Temps moyen de résolution: %.2f heures%n",
+                    ((Number) report.get("averageResolutionTimeHours")).doubleValue()));
         }
 
-        body.append("\nCordialement,\n");
+        body.append("%nCordialement,%n");
         body.append("L'équipe Hotel Ticket Hub");
 
-        sendEmail(hotel.getEmail(), subject, body.toString());
+        sendEmail(hotel.getEmail(), subject, String.format(body.toString()));
     }
 
     /**
@@ -113,18 +125,24 @@ public class EmailService {
         }
 
         String subject = "Paiement en retard - " + hotel.getName();
-        String body = String.format(
-                "Bonjour,\n\n" +
-                        "Votre paiement est en retard depuis le %s.\n\n" +
-                        "Détails:\n" +
-                        "- Hôtel: %s\n" +
-                        "- Montant dû: %.2f €\n" +
-                        "- Date d'échéance: %s\n\n" +
-                        "Votre accès aux services est actuellement suspendu.\n" +
-                        "Veuillez régulariser votre paiement dès que possible pour rétablir l'accès.\n\n" +
-                        "Cordialement,\n" +
-                        "L'équipe Hotel Ticket Hub",
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(DATE_FORMAT_PATTERN);
+        String formattedDate = LocalDateTime.now().format(formatter);
+        String body = String.format("""
+                Bonjour,
+                
+                Votre paiement est en retard depuis le %s.
+                
+                Détails:
+                - Hôtel: %s
+                - Montant dû: %.2f €
+                - Date d'échéance: %s
+                
+                Votre accès aux services est actuellement suspendu.
+                Veuillez régulariser votre paiement dès que possible pour rétablir l'accès.
+                
+                Cordialement,
+                L'équipe Hotel Ticket Hub""",
+                formattedDate,
                 hotel.getName(),
                 payment.getAmount().doubleValue(),
                 payment.getNextPaymentDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));

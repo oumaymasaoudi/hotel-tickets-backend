@@ -99,7 +99,7 @@ public class AuthService {
 
         // Token generation disabled, returns a dummy token
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())
@@ -174,7 +174,7 @@ public class AuthService {
 
         // Token generation disabled, returns a dummy token
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())
@@ -241,7 +241,7 @@ public class AuthService {
         userRoleRepository.save(userRole);
 
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())

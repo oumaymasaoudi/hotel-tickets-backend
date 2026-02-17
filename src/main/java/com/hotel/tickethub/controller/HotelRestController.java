@@ -5,6 +5,7 @@ import com.hotel.tickethub.dto.HotelRequest;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.service.HotelService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/hotels")
 @RequiredArgsConstructor
@@ -45,11 +47,10 @@ public class HotelRestController {
             return ResponseEntity.ok(hotels);
         } catch (Exception e) {
             // Log l'erreur pour le débogage
-            System.err.println("Error in getPublicHotels: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error in getPublicHotels", e);
             // Retourner une liste vide au lieu d'une erreur 500 pour éviter de casser le
             // frontend
-            return ResponseEntity.ok(List.of());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(List.of());
         }
     }
 
