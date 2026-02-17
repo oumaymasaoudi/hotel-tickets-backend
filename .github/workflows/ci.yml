@@ -1,13 +1,23 @@
 name: Backend CI/CD Pipeline
 
-# ⭐ AMÉLIORATIONS APPLIQUÉES:
-# 1. Sonar réutilise jacoco.xml du job test (pas de duplication de tests)
-# 2. continue-on-error conditionnel: bloquant sur main, permissif sur develop
-# 3. Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
-# 4. Build optimisé (réutilise classes compilées du job test)
-# 5. Staging uniquement sur develop, main pour release
-# 6. OWASP pinner à v3 (stable)
-# 7. OWASP et security-lint bloquants sur main
+# ⭐ AMÉLIORATIONS APPLIQUÉES (structure métier optimisée):
+# 
+# GRAPHE DE DÉPENDANCES:
+#   lint ─┐
+#   test ─┼─→ coverage ─→ sonar
+#         └─→ build ─→ docker-build ─→ deploy-staging ─→ deploy-monitoring
+#   dependency-check ─┘
+#   security-lint ────┘
+#
+# 1. ✅ Sonar dépend de coverage et réutilise jacoco.xml (pas de duplication)
+# 2. ✅ Tests → Coverage → Sonar (chaîne claire)
+# 3. ✅ Docker-build attend security checks (DevSecOps strict)
+# 4. ✅ continue-on-error conditionnel: bloquant sur main, permissif sur develop
+# 5. ✅ Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
+# 6. ✅ Build optimisé (réutilise classes compilées du job test)
+# 7. ✅ Staging uniquement sur develop, main pour release
+# 8. ✅ OWASP @v3 et Trivy @0.28.0 (versions stables)
+# 9. ✅ OWASP et security-lint bloquants sur main
 
 on:
   push:
@@ -392,8 +402,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -413,7 +424,8 @@ jobs:
   docker-build:
     name: Backend - Docker Build & Push
     runs-on: ubuntu-latest
-    needs: [build]
+    # ⭐ AMÉLIORATION BONUS: Docker build attend aussi les security checks (DevSecOps strict)
+    needs: [build, dependency-check, security-lint]
     # ⭐ AMÉLIORATION: Docker build pour develop (staging) et main (release)
     if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     concurrency:
