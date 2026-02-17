@@ -26,6 +26,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String DEV_TOKEN = "dev-token";
+
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final HotelRepository hotelRepository;
