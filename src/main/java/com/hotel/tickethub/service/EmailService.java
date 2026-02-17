@@ -85,34 +85,70 @@ public class EmailService {
 
         String subject = String.format("Rapport %s - %s", reportType, hotel.getName());
 
-        StringBuilder body = new StringBuilder();
-        body.append("Bonjour,%n%n");
-        body.append(String.format("Voici votre rapport %s pour la période du %s au %s.%n%n",
-                reportType,
-                ((Map<?, ?>) report.get("period")).get("start"),
-                ((Map<?, ?>) report.get("period")).get("end")));
-
-        body.append("Statistiques des tickets:%n");
-        body.append(String.format("- Total: %d%n", 
-                ((Number) report.get("totalTickets")).intValue()));
-        body.append(String.format("- Ouverts: %d%n", 
-                ((Number) report.get("openTickets")).intValue()));
-        body.append(String.format("- En cours: %d%n", 
-                ((Number) report.get("inProgressTickets")).intValue()));
-        body.append(String.format("- Résolus: %d%n", 
-                ((Number) report.get("resolvedTickets")).intValue()));
-        body.append(String.format("- Urgents: %d%n", 
-                ((Number) report.get("urgentTickets")).intValue()));
-
-        if (report.containsKey("averageResolutionTimeHours")) {
-            body.append(String.format("- Temps moyen de résolution: %.2f heures%n",
-                    ((Number) report.get("averageResolutionTimeHours")).doubleValue()));
+        String periodStart = "";
+        String periodEnd = "";
+        if (report.get("period") instanceof Map<?, ?>) {
+            Map<?, ?> period = (Map<?, ?>) report.get("period");
+            periodStart = period.get("start") != null ? period.get("start").toString() : "";
+            periodEnd = period.get("end") != null ? period.get("end").toString() : "";
         }
 
-        body.append("%nCordialement,%n");
-        body.append("L'équipe Hotel Ticket Hub");
+        String body = String.format("""
+                Bonjour,
+                
+                Voici votre rapport %s pour la période du %s au %s.
+                
+                Statistiques des tickets:
+                - Total: %d
+                - Ouverts: %d
+                - En cours: %d
+                - Résolus: %d
+                - Urgents: %d%s
+                
+                Cordialement,
+                L'équipe Hotel Ticket Hub""",
+                reportType,
+                periodStart,
+                periodEnd,
+                getIntValue(report, "totalTickets"),
+                getIntValue(report, "openTickets"),
+                getIntValue(report, "inProgressTickets"),
+                getIntValue(report, "resolvedTickets"),
+                getIntValue(report, "urgentTickets"),
+                report.containsKey("averageResolutionTimeHours") 
+                    ? String.format("%n- Temps moyen de résolution: %.2f heures", 
+                        getDoubleValue(report, "averageResolutionTimeHours"))
+                    : "");
 
-        sendEmail(hotel.getEmail(), subject, String.format(body.toString()));
+        sendEmail(hotel.getEmail(), subject, body);
+    }
+
+    /**
+     * Helper method to safely get integer value from map
+     */
+    private int getIntValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        return 0;
+    }
+
+    /**
+     * Helper method to safely get double value from map
+     */
+    private double getDoubleValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return 0.0;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return 0.0;
     }
 
     /**
