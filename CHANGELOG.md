@@ -1,3 +1,11 @@
+## [1.10.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.1...v1.10.2) (2026-02-18)
+
+
+### Bug Fixes
+
+* corriger version dependency-check action de v3 Ã  v5 ([9f326a6](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/9f326a6dcbbe64fbee0c7bc9fcc6d6d952a6ed39))
+* utiliser [@main](https://github.com/main) pour dependency-check action (version stable) ([873f828](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/873f8288ca256cf2ff8e6b759640edbb9ef61f0a))
+
 ## [1.10.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.0...v1.10.1) (2026-02-18)
 
 
