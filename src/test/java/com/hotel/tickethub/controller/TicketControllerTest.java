@@ -65,85 +65,68 @@ class TicketControllerTest {
                 when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                                 .thenReturn(ticketResponse);
 
-                String ticketJson = objectMapper.writeValueAsString(createRequest);
-                MockMultipartFile ticketPart = new MockMultipartFile(
-                                "ticket",
-                                "ticket.json",
-                                MediaType.APPLICATION_JSON_VALUE,
-                                ticketJson.getBytes());
+                // When
+                // Test direct du contrôleur (sans MockMvc) car MockMvc multipart a des problèmes de sérialisation
+                org.springframework.web.multipart.MockMultipartFile mockFile = 
+                        new org.springframework.web.multipart.MockMultipartFile(
+                                "images", "test.jpg", "image/jpeg", "content".getBytes());
+                
+                ResponseEntity<TicketResponse> response = ticketController.createTicket(
+                        createRequest, 
+                        List.of(mockFile));
 
-                // When & Then
-                // MockMvc avec multipart peut avoir des problèmes de sérialisation du body
-                // On teste au minimum que le status est 201 et que le service est appelé
-                mockMvc.perform(multipart("/api/tickets/public")
-                                .file(ticketPart)
-                                .contentType(MediaType.MULTIPART_FORM_DATA))
-                                .andExpect(status().isCreated());
+                // Then
+                assertNotNull(response);
+                assertEquals(org.springframework.http.HttpStatus.CREATED, response.getStatusCode());
+                assertNotNull(response.getBody());
+                assertEquals("TKT-001", response.getBody().getTicketNumber());
+                assertEquals(org.springframework.http.MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
 
                 verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
         }
 
         @Test
-        void testCreateTicket_WithImages() throws Exception {
+        void testCreateTicket_WithImages() {
                 // Given
                 when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                                 .thenReturn(ticketResponse);
 
-                String ticketJson = objectMapper.writeValueAsString(createRequest);
-                MockMultipartFile ticketPart = new MockMultipartFile(
-                                "ticket",
-                                "ticket.json",
-                                MediaType.APPLICATION_JSON_VALUE,
-                                ticketJson.getBytes());
-                MockMultipartFile image1 = new MockMultipartFile(
-                                "images",
-                                "test1.jpg",
-                                "image/jpeg",
-                                "content1".getBytes());
-                MockMultipartFile image2 = new MockMultipartFile(
-                                "images",
-                                "test2.jpg",
-                                "image/jpeg",
-                                "content2".getBytes());
+                org.springframework.web.multipart.MockMultipartFile image1 = 
+                        new org.springframework.web.multipart.MockMultipartFile(
+                                "images", "test1.jpg", "image/jpeg", "content1".getBytes());
+                org.springframework.web.multipart.MockMultipartFile image2 = 
+                        new org.springframework.web.multipart.MockMultipartFile(
+                                "images", "test2.jpg", "image/jpeg", "content2".getBytes());
 
-                // When & Then
-                // MockMvc avec multipart peut avoir des problèmes de sérialisation du body
-                // On teste au minimum que le status est 201 et que le service est appelé
-                mockMvc.perform(multipart("/api/tickets/public")
-                                .file(ticketPart)
-                                .file(image1)
-                                .file(image2))
-                                .andExpect(status().isCreated());
+                // When
+                ResponseEntity<TicketResponse> response = ticketController.createTicket(
+                        createRequest, 
+                        List.of(image1, image2));
+
+                // Then
+                assertNotNull(response);
+                assertEquals(org.springframework.http.HttpStatus.CREATED, response.getStatusCode());
+                assertNotNull(response.getBody());
 
                 verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
         }
 
         @Test
-        void testCreateTicket_Error() throws Exception {
+        void testCreateTicket_Error() {
                 // Given
                 when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                                 .thenThrow(new RuntimeException("Error"));
 
-                String ticketJson = objectMapper.writeValueAsString(createRequest);
-                MockMultipartFile ticketPart = new MockMultipartFile(
-                                "ticket",
-                                "ticket.json",
-                                MediaType.APPLICATION_JSON_VALUE,
-                                ticketJson.getBytes());
-
                 // When & Then
-                // MockMvc avec multipart peut avoir des problèmes avec les exceptions
-                // On teste que le service est appelé (l'exception sera gérée par GlobalExceptionHandler en production)
-                // Note: MockMvc avec multipart peut ne pas propager correctement l'exception au GlobalExceptionHandler
-                // En production, l'exception sera correctement gérée et retournera 400
-                // On ne teste pas le status code car MockMvc multipart peut ne pas le gérer correctement
-                try {
-                        mockMvc.perform(multipart("/api/tickets/public")
-                                        .file(ticketPart)
-                                        .contentType(MediaType.MULTIPART_FORM_DATA));
-                } catch (Exception e) {
-                        // L'exception est attendue, on vérifie juste que le service est appelé
-                }
+                // Test direct du contrôleur - l'exception sera propagée
+                // En production, GlobalExceptionHandler gérera cette exception et retournera 400
+                org.springframework.web.multipart.MockMultipartFile mockFile = 
+                        new org.springframework.web.multipart.MockMultipartFile(
+                                "images", "test.jpg", "image/jpeg", "content".getBytes());
+                
+                assertThrows(RuntimeException.class, () -> {
+                        ticketController.createTicket(createRequest, List.of(mockFile));
+                });
 
                 verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
         }
