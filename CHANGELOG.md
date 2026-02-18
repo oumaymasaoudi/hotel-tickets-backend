@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.7...v1.11.0) (2026-02-18)
+
+
+### Features
+
+* ajouter script PowerShell pour dÃ©sactiver analyse auto SonarCloud ([55e3d1a](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/55e3d1aedd5ab5ae9bc2d2ab790a210d59d7f056))
+
 ## [1.10.7](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.6...v1.10.7) (2026-02-18)
 
 
