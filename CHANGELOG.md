@@ -1,3 +1,11 @@
+## [1.10.6](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.5...v1.10.6) (2026-02-18)
+
+
+### Bug Fixes
+
+* corriger SonarCloud (ajouter args pour dÃ©sactiver auto-analysis) et simplifier OWASP args ([7d5ef32](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/7d5ef32edc23174b7583298f01433cd639e3e47d))
+* utiliser SONAR_SCANNER_OPTS pour SonarCloud au lieu de args ([32005db](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/32005dbe3819442d5ea49ce74d95191d63c61fbb))
+
 ## [1.10.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.4...v1.10.5) (2026-02-18)
 
 
