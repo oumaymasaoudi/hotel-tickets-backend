@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -66,21 +67,22 @@ class TicketControllerTest {
                                 .thenReturn(ticketResponse);
 
                 // When
-                // Test direct du contrôleur (sans MockMvc) car MockMvc multipart a des problèmes de sérialisation
-                org.springframework.web.multipart.MockMultipartFile mockFile = 
-                        new org.springframework.web.multipart.MockMultipartFile(
+                // Test direct du contrôleur (sans MockMvc) car MockMvc multipart a des
+                // problèmes de sérialisation
+                MockMultipartFile mockFile = new MockMultipartFile(
                                 "images", "test.jpg", "image/jpeg", "content".getBytes());
-                
+
                 ResponseEntity<TicketResponse> response = ticketController.createTicket(
-                        createRequest, 
-                        List.of(mockFile));
+                                createRequest,
+                                List.of(mockFile));
 
                 // Then
                 assertNotNull(response);
                 assertEquals(org.springframework.http.HttpStatus.CREATED, response.getStatusCode());
                 assertNotNull(response.getBody());
                 assertEquals("TKT-001", response.getBody().getTicketNumber());
-                assertEquals(org.springframework.http.MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
+                assertEquals(org.springframework.http.MediaType.APPLICATION_JSON,
+                                response.getHeaders().getContentType());
 
                 verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
         }
@@ -91,17 +93,15 @@ class TicketControllerTest {
                 when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                                 .thenReturn(ticketResponse);
 
-                org.springframework.web.multipart.MockMultipartFile image1 = 
-                        new org.springframework.web.multipart.MockMultipartFile(
+                MockMultipartFile image1 = new MockMultipartFile(
                                 "images", "test1.jpg", "image/jpeg", "content1".getBytes());
-                org.springframework.web.multipart.MockMultipartFile image2 = 
-                        new org.springframework.web.multipart.MockMultipartFile(
+                MockMultipartFile image2 = new MockMultipartFile(
                                 "images", "test2.jpg", "image/jpeg", "content2".getBytes());
 
                 // When
                 ResponseEntity<TicketResponse> response = ticketController.createTicket(
-                        createRequest, 
-                        List.of(image1, image2));
+                                createRequest,
+                                List.of(image1, image2));
 
                 // Then
                 assertNotNull(response);
@@ -119,11 +119,11 @@ class TicketControllerTest {
 
                 // When & Then
                 // Test direct du contrôleur - l'exception sera propagée
-                // En production, GlobalExceptionHandler gérera cette exception et retournera 400
-                org.springframework.web.multipart.MockMultipartFile mockFile = 
-                        new org.springframework.web.multipart.MockMultipartFile(
+                // En production, GlobalExceptionHandler gérera cette exception et retournera
+                // 400
+                MockMultipartFile mockFile = new MockMultipartFile(
                                 "images", "test.jpg", "image/jpeg", "content".getBytes());
-                
+
                 assertThrows(RuntimeException.class, () -> {
                         ticketController.createTicket(createRequest, List.of(mockFile));
                 });
