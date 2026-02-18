@@ -296,11 +296,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          # Désactiver l'analyse automatique pour forcer l'analyse CI
-          args: >
-            -Dsonar.ci.skip=false
-            -Dsonar.analysis.mode=publish
+          # Forcer l'analyse CI et désactiver l'analyse automatique
+          SONAR_SCANNER_OPTS: '-Dsonar.ci.skip=false'
         # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
       
