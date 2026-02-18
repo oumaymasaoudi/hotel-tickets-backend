@@ -354,8 +354,8 @@ jobs:
           path: '.'
           format: 'ALL'
           args: >
-            --failOnCVSS 7
-            --suppression owasp-dependency-check-suppressions.xml
+            --failOnCVSS=7
+            --suppression=owasp-dependency-check-suppressions.xml
             --enableRetired
             --enableExperimental
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
