@@ -1,3 +1,10 @@
+## [1.10.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.2...v1.10.3) (2026-02-18)
+
+
+### Bug Fixes
+
+* corriger format arguments OWASP dependency-check (utiliser = pour les valeurs) ([37df53c](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/37df53c45116184127638e9b8a5d7af5a7dd5f69))
+
 ## [1.10.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.1...v1.10.2) (2026-02-18)
 
 
