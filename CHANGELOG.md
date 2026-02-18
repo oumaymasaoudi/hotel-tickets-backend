@@ -1,3 +1,10 @@
+## [1.10.7](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.6...v1.10.7) (2026-02-18)
+
+
+### Bug Fixes
+
+* exclure node_modules du scan OWASP (backend Java uniquement) ([386a0c7](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/386a0c7a8f5b076893f5070ada0e798da57de6ab))
+
 ## [1.10.6](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.5...v1.10.6) (2026-02-18)
 
 
