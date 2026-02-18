@@ -338,27 +338,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'maven'
-
       # ⭐ AMÉLIORATION: Utiliser @main pour la version la plus récente et stable
       # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop
+      # Note: L'action OWASP Dependency Check utilise Docker et n'a pas besoin de Java installé sur le runner
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
           format: 'ALL'
-          # Utiliser | pour préserver les sauts de ligne et éviter la concaténation
-          args: |
-            --failOnCVSS=7
-            --suppression=owasp-dependency-check-suppressions.xml
-            --enableRetired
-            --enableExperimental
+          # Format: arguments séparés par des espaces sur une seule ligne
+          # L'action concatène les arguments, donc on utilise un format compact
+          args: '--failOnCVSS=7 --suppression=owasp-dependency-check-suppressions.xml --enableRetired --enableExperimental'
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Upload Dependency Check results (HTML)
