@@ -296,10 +296,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          # Désactiver l'analyse automatique pour permettre l'analyse CI
-          args: >
-            -Dsonar.ci.skip=false
         # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
       
@@ -357,7 +353,8 @@ jobs:
           project: 'hotel-ticket-hub-backend'
           path: '.'
           format: 'ALL'
-          args: >
+          # Utiliser | pour préserver les sauts de ligne et éviter la concaténation
+          args: |
             --failOnCVSS=7
             --suppression=owasp-dependency-check-suppressions.xml
             --enableRetired
