@@ -1,3 +1,10 @@
+## [1.10.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.4...v1.10.5) (2026-02-18)
+
+
+### Bug Fixes
+
+* retirer setup Java pour OWASP (action utilise Docker avec Java intÃ©grÃ©) ([b4c7ddc](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/b4c7ddc8bf5075103bd7a9a4fd4388b002c1fdd7))
+
 ## [1.10.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.3...v1.10.4) (2026-02-18)
 
 
