@@ -37,6 +37,9 @@ class TicketControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private TicketController ticketController;
 
     private TicketResponse ticketResponse;
     private CreateTicketRequest createRequest;
@@ -71,23 +74,14 @@ class TicketControllerTest {
         );
 
         // When & Then
-        String responseContent = mockMvc.perform(multipart("/api/tickets/public")
+        // MockMvc peut avoir des problèmes avec multipart et @RequestPart
+        // On teste juste que le service est appelé et retourne la bonne réponse
+        mockMvc.perform(multipart("/api/tickets/public")
                         .file(ticketPart)
                         .contentType(MediaType.MULTIPART_FORM_DATA))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        
-        // Verify response is not empty
-        assertNotNull(responseContent, "Response body should not be null");
-        assertFalse(responseContent.isEmpty(), "Response body should not be empty");
-        
-        // Parse and verify JSON content
-        TicketResponse actualResponse = objectMapper.readValue(responseContent, TicketResponse.class);
-        assertNotNull(actualResponse, "Parsed response should not be null");
-        assertEquals("TKT-001", actualResponse.getTicketNumber(), "Ticket number should match");
+                .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
     }
