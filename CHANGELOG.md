@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.0...v1.10.1) (2026-02-18)
+
+
+### Bug Fixes
+
+* permettre SonarCloud, OWASP et Trivy sur les pull requests ([03545e1](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/03545e18e1e1287b98f615137a90df778c4e7fe4))
+
 # [1.10.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.9.0...v1.10.0) (2026-02-18)
 
 
