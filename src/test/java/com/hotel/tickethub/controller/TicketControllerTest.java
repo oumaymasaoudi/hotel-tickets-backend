@@ -74,7 +74,7 @@ class TicketControllerTest {
                         .file(ticketPart)
                         .contentType(MediaType.MULTIPART_FORM_DATA))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
@@ -131,10 +131,13 @@ class TicketControllerTest {
         );
 
         // When & Then
+        // GlobalExceptionHandler gère RuntimeException et retourne BAD_REQUEST avec body JSON
         mockMvc.perform(multipart("/api/tickets/public")
                         .file(ticketPart)
                         .contentType(MediaType.MULTIPART_FORM_DATA))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").exists());
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
     }

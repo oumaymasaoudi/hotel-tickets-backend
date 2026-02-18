@@ -27,12 +27,11 @@ public class TicketController {
     public ResponseEntity<TicketResponse> createTicket(
             @Valid @RequestPart("ticket") CreateTicketRequest request,
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
-        try {
-            return ResponseEntity.ok(ticketService.createTicket(request, images));
-        } catch (RuntimeException e) {
-            // Retourner une erreur 400 avec le message d'erreur
-            return ResponseEntity.badRequest().build();
-        }
+        // Laisser GlobalExceptionHandler gérer les exceptions
+        TicketResponse response = ticketService.createTicket(request, images);
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(response);
     }
 
     @GetMapping("/public/{ticketNumber}")
