@@ -1,3 +1,11 @@
+## [1.10.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.3...v1.10.4) (2026-02-18)
+
+
+### Bug Fixes
+
+* corriger format args OWASP (utiliser |) et ajouter sonar.ci.skip=false ([851837b](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/851837b76eccc396bc39529708c109b1c2ef6eed))
+* corriger SonarCloud (dÃ©sactiver analyse auto) et format args OWASP (utiliser | au lieu de >) ([18ff2f7](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/18ff2f754ee1c6caad692c730476d50dfc3560ef))
+
 ## [1.10.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.2...v1.10.3) (2026-02-18)
 
 
