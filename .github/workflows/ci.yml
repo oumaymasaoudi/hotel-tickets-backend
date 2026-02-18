@@ -290,14 +290,18 @@ jobs:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       # ⭐ AMÉLIORATION TOP 1: Sonar utilise jacoco.xml du job test (pas besoin de refaire les tests)
+      # ⚠️ IMPORTANT: Si vous voyez l'erreur "Automatic Analysis is enabled", 
+      # désactivez l'analyse automatique dans SonarCloud :
+      # 1. Allez sur https://sonarcloud.io
+      # 2. Projet > Administration > Analysis Method
+      # 3. Désactivez "Automatic Analysis"
+      # Voir SONARCLOUD-FIX.md pour plus de détails
       - name: SonarCloud Scan (using coverage from test job)
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # Forcer l'analyse CI et désactiver l'analyse automatique
-          SONAR_SCANNER_OPTS: '-Dsonar.ci.skip=false'
         # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
       
