@@ -349,9 +349,9 @@ jobs:
           project: 'hotel-ticket-hub-backend'
           path: '.'
           format: 'ALL'
-          # Simplifier les arguments - retirer suppression si le fichier cause problème
-          # Format: arguments séparés par des espaces sur une seule ligne
-          args: '--failOnCVSS=7 --enableRetired --enableExperimental'
+          # Exclure node_modules et autres fichiers non-Java du scan
+          # Le backend est Java/Spring Boot, donc on ne scanne que les dépendances Maven
+          args: '--failOnCVSS=7 --enableRetired --enableExperimental --exclude "**/node_modules/**" --exclude "**/package*.json" --exclude "**/.git/**"'
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Upload Dependency Check results (HTML)
