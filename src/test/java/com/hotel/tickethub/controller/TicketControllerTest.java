@@ -74,12 +74,11 @@ class TicketControllerTest {
         );
 
         // When & Then
-        // MockMvc peut avoir des problèmes avec multipart et @RequestPart
-        // On teste juste que le service est appelé et retourne la bonne réponse
+        // Le contrôleur retourne 201 CREATED avec body JSON
         mockMvc.perform(multipart("/api/tickets/public")
                         .file(ticketPart)
                         .contentType(MediaType.MULTIPART_FORM_DATA))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.ticketNumber").value("TKT-001"));
 
@@ -117,7 +116,8 @@ class TicketControllerTest {
                         .file(ticketPart)
                         .file(image1)
                         .file(image2))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON));
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
     }
@@ -146,6 +146,36 @@ class TicketControllerTest {
                 .andExpect(jsonPath("$.error").exists());
 
         verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
+    }
+
+    @Test
+    void testCreateTicket_ValidationError() throws Exception {
+        // Given - CreateTicketRequest invalide (champs obligatoires manquants)
+        CreateTicketRequest invalidRequest = new CreateTicketRequest();
+        // hotelId et categoryId sont null (violation @NotNull)
+        // clientEmail est null (violation @NotBlank @Email)
+        // description est null (violation @NotBlank)
+        
+        String ticketJson = objectMapper.writeValueAsString(invalidRequest);
+        MockMultipartFile ticketPart = new MockMultipartFile(
+                "ticket", 
+                "ticket.json", 
+                MediaType.APPLICATION_JSON_VALUE, 
+                ticketJson.getBytes()
+        );
+
+        // When & Then
+        // MethodArgumentNotValidException devrait être gérée par GlobalExceptionHandler
+        mockMvc.perform(multipart("/api/tickets/public")
+                        .file(ticketPart)
+                        .contentType(MediaType.MULTIPART_FORM_DATA))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").exists())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        // Le service ne devrait pas être appelé si la validation échoue
+        verify(ticketService, never()).createTicket(any(CreateTicketRequest.class), anyList());
     }
 
     @Test

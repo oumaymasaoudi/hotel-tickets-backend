@@ -29,7 +29,10 @@ public class TicketController {
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
         // Laisser GlobalExceptionHandler gérer les exceptions
         TicketResponse response = ticketService.createTicket(request, images);
-        return ResponseEntity.ok(response);
+        return ResponseEntity
+                .status(org.springframework.http.HttpStatus.CREATED)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(response);
     }
 
     @GetMapping("/public/{ticketNumber}")
