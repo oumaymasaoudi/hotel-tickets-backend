@@ -34,9 +34,26 @@ L'analyse automatique est activée dans SonarCloud et entre en conflit avec l'an
 5. **Sauvegarder**
    - Cliquer sur **"Save"** ou **"Enregistrer"**
 
-### Alternative : Via l'API SonarCloud
+### Alternative 1 : Via le script PowerShell
 
-Si vous préférez utiliser l'API :
+Un script PowerShell est disponible pour automatiser la désactivation :
+
+```powershell
+# Option 1: Avec le token en paramètre
+.\scripts\disable-sonarcloud-auto-analysis.ps1 -SonarToken 'votre-token-sonarcloud'
+
+# Option 2: Avec la variable d'environnement
+$env:SONAR_TOKEN = 'votre-token-sonarcloud'
+.\scripts\disable-sonarcloud-auto-analysis.ps1
+```
+
+**Récupérer le token SonarCloud :**
+- GitHub Repository > Settings > Secrets and variables > Actions > `SONAR_TOKEN`
+- Ou créer un nouveau token sur https://sonarcloud.io > My Account > Security
+
+### Alternative 2 : Via l'API SonarCloud (curl)
+
+Si vous préférez utiliser curl directement :
 
 ```bash
 # Récupérer votre token SonarCloud depuis les secrets GitHub
