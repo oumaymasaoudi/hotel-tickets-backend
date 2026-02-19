@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.2...v1.12.0) (2026-02-19)
+
+
+### Features
+
+* dependaboty.yml ([9da2418](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/9da2418cdb4e7d73510aa590775ff41dd0d88fe1))
+
 ## [1.11.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.1...v1.11.2) (2026-02-19)
 
 
