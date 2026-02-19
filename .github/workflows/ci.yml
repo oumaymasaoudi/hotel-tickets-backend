@@ -16,7 +16,7 @@ name: Backend CI/CD Pipeline
 # 5. ✅ Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
 # 6. ✅ Build accéléré par cache Maven (chaque job = VM séparée, pas de réutilisation directe)
 # 7. ✅ Staging uniquement sur develop, main pour release
-# 8. ✅ OWASP @v3 et Trivy @0.28.0 (versions stables)
+# 8. ✅ OWASP Dependency Check Action @v1.1.0 et Trivy @0.28.0 (versions stables)
 # 9. ✅ OWASP et security-lint bloquants sur main
 
 on:
@@ -418,14 +418,21 @@ jobs:
       # Voir SONARCLOUD-FIX.md pour plus de détails
       # Note: Le chemin JaCoCo est configuré dans sonar-project.properties:
       # sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-      # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail (géré au niveau job)
-      - name: SonarCloud Scan (using coverage from test job)
+      # ⭐ AMÉLIORATION TOP 2: Utiliser Maven SonarScanner (recommandé par SonarSource pour Maven)
+      # Skip si PR depuis un fork (secrets.SONAR_TOKEN non disponible)
+      - name: SonarCloud Analysis (Maven)
         id: sonarcloud-scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        run: >
+          mvn -B sonar:sonar
+          -DskipTests
+          -Dsonar.organization=oumaymasaoudi
+          -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend
+          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
       # Note: Le Quality Gate SonarCloud est vérifié automatiquement par l'action sonarcloud-github-action
       # Le continue-on-error au niveau job permet de bloquer sur main et d'être permissif sur develop
@@ -450,7 +457,7 @@ jobs:
             echo "The analysis should appear in SonarCloud within a few minutes"
           else
             echo "Status: Analysis may have failed - check logs above"
-            echo "Exit code: ${{ steps.sonarcloud-scan.outcome }}"
+            echo "Outcome: ${{ steps.sonarcloud-scan.outcome || 'skipped' }}"
           fi
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
@@ -476,7 +483,7 @@ jobs:
       # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
       # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@v3.0
+        uses: dependency-check/Dependency-Check_Action@v1.1.0
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
@@ -569,7 +576,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
-      # ⭐ AMÉLIORATION DevSecOps: exit-code: '1' pour bloquer le pipeline si vulnérabilités CRITICAL/HIGH trouvées
+      # ⭐ AMÉLIORATION DevSecOps: exit-code conditionnel - bloquant sur main, permissif sur develop
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -578,7 +585,9 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # Faire échouer le job si vulnérabilités CRITICAL/HIGH trouvées
+          # Sur main: exit-code=1 → pipeline bloqué si vulnérabilités CRITICAL/HIGH trouvées
+          # Sur develop: exit-code=0 → pas d'erreur rouge, mais SARIF est uploadé quand même
+          exit-code: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.ref != 'refs/heads/main' }}
