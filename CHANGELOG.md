@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.12.0...v1.12.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* utiliser [@main](https://github.com/main) temporairement pour OWASP Dependency Check (Dependabot dÃ©couvrira la version taguÃ©e) ([6da30ef](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/6da30ef231a3920fa86f3972eec8bb2bbf865a3f))
+
 # [1.12.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.2...v1.12.0) (2026-02-19)
 
 
