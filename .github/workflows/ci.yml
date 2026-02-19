@@ -578,7 +578,7 @@ jobs:
       # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
       # ⭐ AMÉLIORATION DevSecOps: exit-code conditionnel - bloquant sur main, permissif sur develop
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
