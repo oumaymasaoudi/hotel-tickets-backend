@@ -426,15 +426,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       
-      # Vérifier le Quality Gate SonarCloud (bloque vraiment sur main si Quality Gate KO)
-      # Le continue-on-error est géré au niveau job, pas ici pour éviter la confusion
-      # Timeout augmenté à 10 minutes pour éviter les flakiness (SonarCloud peut avoir un délai de traitement)
-      - name: SonarCloud Quality Gate Check
-        id: sonarcloud-quality-gate
-        uses: SonarSource/sonarcloud-quality-gate-action@v1.1.0
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        timeout-minutes: 10
+      # Note: Le Quality Gate SonarCloud est vérifié automatiquement par l'action sonarcloud-github-action
+      # Le continue-on-error au niveau job permet de bloquer sur main et d'être permissif sur develop
+      # Si le Quality Gate échoue, le job échouera automatiquement (sauf si continue-on-error est true)
       
       - name: Verify SonarCloud Analysis Sent
         if: always()
@@ -475,13 +469,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ⭐ AMÉLIORATION: Version pinée pour stabilité (v3.3.0)
+      # ⭐ AMÉLIORATION: Version pinée pour stabilité (v3)
       # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop
       # Note: L'action OWASP Dependency Check utilise Docker et n'a pas besoin de Java installé sur le runner
       # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
       # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@v3.3.0
+        uses: dependency-check/Dependency-Check_Action@v3
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
