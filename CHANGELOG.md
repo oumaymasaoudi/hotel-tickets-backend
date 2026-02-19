@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.12.1...v1.13.0) (2026-02-19)
+
+
+### Features
+
+* amÃ©liorer diagnostic SonarCloud et Trivy avec logs dÃ©taillÃ©s ([6e54cc4](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/6e54cc4a027d965f8146ce92e932d2b37a5ef530))
+
 ## [1.12.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.12.0...v1.12.1) (2026-02-19)
 
 
