@@ -425,11 +425,42 @@ jobs:
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
         run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Starting SonarCloud Analysis..."
+          echo "Organization: oumaymasaoudi"
+          echo "Project Key: oumaymasaoudi_hotel-tickets-backend"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # Vérifier que le token est disponible
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "❌ ERROR: SONAR_TOKEN is not set!"
+            exit 1
+          fi
+          
+          # Vérifier que jacoco.xml existe
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "❌ ERROR: jacoco.xml not found at target/site/jacoco/jacoco.xml"
+            exit 1
+          fi
+          
           mvn -B sonar:sonar \
             -DskipTests \
             -Dsonar.organization=oumaymasaoudi \
             -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -Dsonar.host.url=https://sonarcloud.io
+          
+          SONAR_EXIT_CODE=$?
+          if [ $SONAR_EXIT_CODE -ne 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "⚠️ SonarCloud analysis completed with exit code: $SONAR_EXIT_CODE"
+            echo "This may indicate:"
+            echo "  - Quality Gate failed (check https://sonarcloud.io)"
+            echo "  - Analysis error (check logs above)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit $SONAR_EXIT_CODE
+          fi
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
@@ -581,7 +612,9 @@ jobs:
       # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
       # ⭐ AMÉLIORATION DevSecOps: exit-code conditionnel - bloquant sur main, permissif sur develop
       - name: Run Trivy vulnerability scanner
+        id: trivy-scan
         uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -594,6 +627,30 @@ jobs:
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.ref != 'refs/heads/main' }}
+      
+      # Afficher un résumé des résultats Trivy pour diagnostic
+      - name: Trivy Scan Summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Trivy Scan Results Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [ "${{ steps.trivy-scan.outcome }}" == "failure" ]; then
+            echo "❌ Trivy scan found CRITICAL or HIGH vulnerabilities"
+            echo "Branch: ${{ github.ref_name }}"
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              echo "Status: Pipeline BLOCKED (main branch - strict mode)"
+            else
+              echo "Status: Warning only (not on main branch)"
+            fi
+            echo ""
+            echo "Check the Trivy logs above for details"
+            echo "SARIF report uploaded to GitHub Security tab"
+          else
+            echo "✓ Trivy scan completed successfully"
+            echo "No CRITICAL or HIGH vulnerabilities found"
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # Vérifier que le fichier SARIF existe avant upload (robustesse)
       - name: Check if Trivy SARIF exists
