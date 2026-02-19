@@ -104,9 +104,9 @@ public class TicketController {
             @Valid @RequestBody UpdateTicketStatusRequest request,
             @RequestParam UUID userId) {
         try {
-            log.debug("Updating ticket status - ticketId: {}, userId: {}, status: {}, technicianId: {}", 
-                ticketId, userId, request.getStatus(), request.getTechnicianId());
-            
+            log.debug("Updating ticket status - ticketId: {}, userId: {}, status: {}, technicianId: {}",
+                    ticketId, userId, request.getStatus(), request.getTechnicianId());
+
             TicketResponse result = ticketService.updateTicketStatus(ticketId, request, userId);
             log.info("Ticket status updated successfully - ticketId: {}, status: {}", ticketId, request.getStatus());
             return ResponseEntity.ok(result);

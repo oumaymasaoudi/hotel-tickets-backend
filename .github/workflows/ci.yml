@@ -14,7 +14,7 @@ name: Backend CI/CD Pipeline
 # 3. ✅ Docker-build attend security checks (DevSecOps strict)
 # 4. ✅ continue-on-error conditionnel: bloquant sur main, permissif sur develop
 # 5. ✅ Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
-# 6. ✅ Build optimisé (réutilise classes compilées du job test)
+# 6. ✅ Build accéléré par cache Maven (chaque job = VM séparée, pas de réutilisation directe)
 # 7. ✅ Staging uniquement sur develop, main pour release
 # 8. ✅ OWASP @v3 et Trivy @0.28.0 (versions stables)
 # 9. ✅ OWASP et security-lint bloquants sur main
@@ -22,14 +22,37 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
-    # Note: '**' signifie tous les fichiers du repo (backend est à la racine)
+    # Optimisation : déclencher uniquement sur changements pertinents
     paths:
-      - '**'
+      - 'src/**'
+      - 'pom.xml'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
       - '.github/workflows/**'
+      - 'monitoring/**'
+      - 'scripts/**'
+      - 'checkstyle.xml'
+      - 'spotbugs-exclude.xml'
+      - 'owasp-dependency-check-suppressions.xml'
+      - 'infrastructure/**'
+      - '.env.example'
+      - 'Makefile'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - '**'
+      - 'src/**'
+      - 'pom.xml'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - '.github/workflows/**'
+      - 'monitoring/**'
+      - 'scripts/**'
+      - 'checkstyle.xml'
+      - 'spotbugs-exclude.xml'
+      - 'owasp-dependency-check-suppressions.xml'
+      - 'infrastructure/**'
+      - '.env.example'
+      - 'Makefile'
   schedule:
     # Security scan tous les lundis à 2h du matin
     - cron: '0 2 * * 1'
@@ -116,8 +139,10 @@ jobs:
           cache: 'maven'
       
       # ⭐ AMÉLIORATION: Utiliser verify pour compiler + tester + générer coverage en une seule fois
+      # Si jacoco-maven-plugin est configuré avec prepare-agent dans le POM, verify génère déjà le rapport
+      # Sinon, jacoco:report est appelé explicitement après verify
       - name: Run tests and generate coverage report
-        run: mvn -B clean verify jacoco:report -DskipITs
+        run: mvn -B clean verify -DskipITs jacoco:report
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -157,6 +182,10 @@ jobs:
     timeout-minutes: 5
     
     steps:
+      # Checkout pour Codecov (commit metadata) et stabilité générale
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - name: Download JaCoCo Report
         uses: actions/download-artifact@v4
         with:
@@ -170,7 +199,59 @@ jobs:
             exit 1
           fi
           echo "✓ jacoco.xml found: $(ls -lh target/site/jacoco/jacoco.xml)"
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+          
+          # Vérifier le seuil de couverture réellement
+          # Parse jacoco.xml pour extraire le coverage total (utilise Python3 disponible sur ubuntu-latest)
+          # Fallback sur LINE si INSTRUCTION absent (robustesse selon versions JaCoCo)
+          COVERAGE_DATA=$(python3 -c "import xml.etree.ElementTree as ET; import sys; tree = ET.parse('target/site/jacoco/jacoco.xml'); root = tree.getroot(); counter = root.find('.//counter[@type=\"INSTRUCTION\"]'); counter_type = 'INSTRUCTION' if counter is not None else None; counter = counter if counter is not None else root.find('.//counter[@type=\"LINE\"]'); counter_type = counter_type if counter_type else ('LINE' if counter is not None else 'ERROR'); missed = int(counter.get('missed', 0)) if counter is not None else 0; covered = int(counter.get('covered', 0)) if counter is not None else 0; total = missed + covered; coverage_pct = (covered / total * 100) if total > 0 else 0.0; print(f'{coverage_pct:.2f}|{missed}|{covered}|{total}|{counter_type}')" 2>/dev/null || echo "0.00|0|0|0|ERROR")
+          
+          COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-60.0}
+          COVERAGE_NUM=$(echo "$COVERAGE_DATA" | cut -d'|' -f1)
+          MISSED=$(echo "$COVERAGE_DATA" | cut -d'|' -f2)
+          COVERED=$(echo "$COVERAGE_DATA" | cut -d'|' -f3)
+          TOTAL=$(echo "$COVERAGE_DATA" | cut -d'|' -f4)
+          COUNTER_TYPE=$(echo "$COVERAGE_DATA" | cut -d'|' -f5)
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Coverage Analysis"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Coverage Details:"
+          echo "  - Counter type used: ${COUNTER_TYPE}"
+          echo "  - Covered: ${COVERED}"
+          echo "  - Missed: ${MISSED}"
+          echo "  - Total: ${TOTAL}"
+          echo "  - Coverage percentage: ${COVERAGE_NUM}%"
+          echo "  - Threshold: ${COVERAGE_THRESHOLD}%"
+          
+          # Vérifier que le counter existe et que les données sont valides
+          if [ "$TOTAL" = "0" ] || [ -z "$COVERAGE_NUM" ] || [ "$COUNTER_TYPE" = "ERROR" ]; then
+            echo "❌ ERROR: Could not parse coverage data from jacoco.xml"
+            echo "   Counter types INSTRUCTION and LINE not found, or file format changed"
+            echo "   This indicates a pipeline issue that needs investigation"
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              echo "   ❌ Failing on main branch (DevSecOps strict: cannot proceed without coverage data)"
+              exit 1
+            else
+              echo "   ⚠️  Warning only (not on main branch)"
+            fi
+          else
+            # Comparaison simple avec awk (pas besoin de bc)
+            COVERAGE_CHECK=$(awk "BEGIN {print ($COVERAGE_NUM >= $COVERAGE_THRESHOLD)}")
+            if [ "$COVERAGE_CHECK" = "1" ]; then
+              echo "✓ Coverage ${COVERAGE_NUM}% meets threshold ${COVERAGE_THRESHOLD}%"
+            else
+              echo "❌ Coverage ${COVERAGE_NUM}% is below threshold ${COVERAGE_THRESHOLD}%"
+              if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+                exit 1
+              else
+                echo "⚠️  Warning only (not on main branch)"
+              fi
+            fi
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        env:
+          COVERAGE_THRESHOLD: 60.0
+        # continue-on-error géré par la logique interne du script (fail sur main, warn sur develop)
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -202,9 +283,10 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       
-      # ⭐ AMÉLIORATION: Réutiliser les artefacts compilés du job test au lieu de refaire clean package
-      # Le job test fait déjà 'mvn verify' qui compile et teste, donc on peut juste faire package
-      - name: Build JAR (reusing compiled classes from test job)
+      # Note: Chaque job GitHub Actions s'exécute sur une VM séparée
+      # Maven utilise le cache (~/.m2) pour accélérer la compilation
+      # mais les classes compilées du job test ne sont pas réutilisées directement
+      - name: Build JAR
         run: mvn -B package -DskipTests -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
@@ -282,12 +364,50 @@ jobs:
             echo "✓ Coverage report will be used by SonarCloud"
           fi
       
-      # Compiler uniquement les classes pour Sonar (nécessaire pour l'analyse statique)
-      # Pas besoin de refaire les tests car jacoco.xml est déjà disponible
-      - name: Compile classes for Sonar (no tests needed)
-        run: mvn -B compile -DskipTests -DskipITs
+      # Compiler les classes principales ET les classes de test pour Sonar
+      # SonarCloud a besoin de target/classes ET target/test-classes
+      # Pas besoin d'exécuter les tests car jacoco.xml est déjà disponible
+      # Utiliser -Dmaven.test.skip=true en plus de -DskipTests pour éviter tout hook de test
+      - name: Compile classes and test classes for Sonar
+        run: mvn -B test-compile -DskipTests=true -Dmaven.test.skip=true -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
+      
+      # Vérifier que tout est prêt pour SonarCloud (classes + coverage)
+      - name: Verify SonarCloud prerequisites
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying SonarCloud prerequisites..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # Vérifier les classes compilées
+          if [ ! -d "target/classes" ]; then
+            echo "❌ ERROR: target/classes not found!"
+            exit 1
+          fi
+          CLASS_COUNT=$(find target/classes -name "*.class" | wc -l)
+          echo "✓ Compiled classes found: $CLASS_COUNT"
+          
+          # Vérifier le rapport JaCoCo
+          if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
+            echo "❌ ERROR: jacoco.xml not found!"
+            echo "   Expected path: target/site/jacoco/jacoco.xml"
+            exit 1
+          fi
+          echo "✓ JaCoCo XML report found: $(ls -lh target/site/jacoco/jacoco.xml)"
+          
+          # Vérifier les test classes (requis par SonarCloud)
+          if [ ! -d "target/test-classes" ]; then
+            echo "❌ ERROR: target/test-classes not found!"
+            echo "   SonarCloud requires test classes to be compiled"
+            exit 1
+          fi
+          TEST_CLASS_COUNT=$(find target/test-classes -name "*.class" | wc -l)
+          echo "✓ Test classes found: $TEST_CLASS_COUNT"
+          
+          echo ""
+          echo "✓ All prerequisites verified - SonarCloud can analyze with coverage"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
       # ⭐ AMÉLIORATION TOP 1: Sonar utilise jacoco.xml du job test (pas besoin de refaire les tests)
       # ⚠️ IMPORTANT: Si vous voyez l'erreur "Automatic Analysis is enabled", 
@@ -296,14 +416,25 @@ jobs:
       # 2. Projet > Administration > Analysis Method
       # 3. Désactivez "Automatic Analysis"
       # Voir SONARCLOUD-FIX.md pour plus de détails
+      # Note: Le chemin JaCoCo est configuré dans sonar-project.properties:
+      # sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+      # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail (géré au niveau job)
       - name: SonarCloud Scan (using coverage from test job)
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+      
+      # Vérifier le Quality Gate SonarCloud (bloque vraiment sur main si Quality Gate KO)
+      # Le continue-on-error est géré au niveau job, pas ici pour éviter la confusion
+      # Timeout augmenté à 10 minutes pour éviter les flakiness (SonarCloud peut avoir un délai de traitement)
+      - name: SonarCloud Quality Gate Check
+        id: sonarcloud-quality-gate
+        uses: SonarSource/sonarcloud-quality-gate-action@v1.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        timeout-minutes: 10
       
       - name: Verify SonarCloud Analysis Sent
         if: always()
@@ -344,19 +475,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ⭐ AMÉLIORATION: Utiliser @main pour la version la plus récente et stable
+      # ⭐ AMÉLIORATION: Version pinée pour stabilité (v3.3.0)
       # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop
       # Note: L'action OWASP Dependency Check utilise Docker et n'a pas besoin de Java installé sur le runner
+      # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
+      # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@v3.3.0
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
           format: 'ALL'
-          # Exclure node_modules et autres fichiers non-Java du scan
-          # Le backend est Java/Spring Boot, donc on ne scanne que les dépendances Maven
-          args: '--failOnCVSS=7 --enableRetired --enableExperimental --exclude "**/node_modules/**" --exclude "**/package*.json" --exclude "**/.git/**"'
+          # Exclure node_modules et fichiers non-Java pour scanner uniquement les dépendances Maven
+          # dependency-check détecte automatiquement pom.xml et scanne les dépendances Maven uniquement
+          args: '--failOnCVSS=7 --enableRetired --enableExperimental --exclude "**/node_modules/**" --exclude "**/package*.json" --exclude "**/.git/**" --exclude "**/target/**"'
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+
+      # Debug: Lister les fichiers générés par dependency-check (robustesse)
+      - name: Debug Dependency-Check outputs
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Dependency-Check Output Files Debug"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Listing reports directory:"
+          ls -lah reports/ 2>/dev/null || echo "reports/ directory not found"
+          echo ""
+          echo "Searching for dependency-check files:"
+          find . -maxdepth 4 -type f \( -iname "*dependency-check*" -o -iname "trivy-results.sarif" -o -iname "*.sarif" \) 2>/dev/null | head -20 || echo "No dependency-check files found"
+          echo ""
+          echo "Checking for SARIF file:"
+          if [ -f "reports/dependency-check-report.sarif" ]; then
+            echo "✓ SARIF file found: reports/dependency-check-report.sarif"
+            ls -lh reports/dependency-check-report.sarif
+          else
+            echo "⚠️  SARIF file not found at reports/dependency-check-report.sarif"
+          fi
+          echo ""
+          echo "Checking for HTML report:"
+          if [ -f "reports/dependency-check-report.html" ]; then
+            echo "✓ HTML report found: reports/dependency-check-report.html"
+            ls -lh reports/dependency-check-report.html
+          else
+            echo "⚠️  HTML report not found at reports/dependency-check-report.html"
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Upload Dependency Check results (HTML)
         uses: actions/upload-artifact@v4
@@ -372,12 +537,20 @@ jobs:
         id: check_sarif
         if: always()
         run: |
-          if [ -f "reports/dependency-check-report.sarif" ]; then
+          # Chercher dynamiquement le fichier SARIF (le chemin peut varier selon la version de l'action OWASP)
+          # Chercher d'abord dans reports/ (emplacement standard), puis globalement
+          SARIF=$(find reports -type f -name "*.sarif" 2>/dev/null | head -n 1 || true)
+          if [ -z "$SARIF" ]; then
+            # Fallback : chercher globalement tous les SARIF
+            SARIF=$(find . -type f -name "*.sarif" 2>/dev/null | head -n 1 || true)
+          fi
+          if [ -n "$SARIF" ]; then
+            echo "sarif_file=$SARIF" >> $GITHUB_OUTPUT
             echo "sarif_exists=true" >> $GITHUB_OUTPUT
-            echo "SARIF file found"
+            echo "✓ SARIF file found: $SARIF"
           else
             echo "sarif_exists=false" >> $GITHUB_OUTPUT
-            echo "SARIF file not found (this is normal if no vulnerabilities were found)"
+            echo "⚠️  SARIF file not found (this is normal if no vulnerabilities were found)"
           fi
         continue-on-error: true
 
@@ -385,7 +558,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         if: always() && steps.check_sarif.outputs.sarif_exists == 'true'
         with:
-          sarif_file: reports/dependency-check-report.sarif
+          sarif_file: ${{ steps.check_sarif.outputs.sarif_file }}
         continue-on-error: true
 
   security-lint:
@@ -401,6 +574,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
+      # ⭐ AMÉLIORATION DevSecOps: exit-code: '1' pour bloquer le pipeline si vulnérabilités CRITICAL/HIGH trouvées
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -409,10 +583,28 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # Faire échouer le job si vulnérabilités CRITICAL/HIGH trouvées
+          # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
+          # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
+          ignore-unfixed: ${{ github.ref != 'refs/heads/main' }}
+
+      # Vérifier que le fichier SARIF existe avant upload (robustesse)
+      - name: Check if Trivy SARIF exists
+        id: trivy_sarif
+        if: always()
+        run: |
+          if [ -f "trivy-results.sarif" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✓ Trivy SARIF file found"
+            ls -lh trivy-results.sarif
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Trivy SARIF file not found (may occur if Trivy scan failed or timed out)"
+          fi
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && steps.trivy_sarif.outputs.exists == 'true'
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -422,12 +614,14 @@ jobs:
   docker-build:
     name: Backend - Docker Build & Push
     runs-on: ubuntu-latest
-    # ⭐ AMÉLIORATION BONUS: Docker build attend aussi les security checks (DevSecOps strict)
-    needs: [build, dependency-check, security-lint]
+    # ⭐ AMÉLIORATION BONUS: Docker build attend security checks + SonarCloud Quality Gate (DevSecOps strict)
+    # Sur main : pas d'image si Sonar Quality Gate KO
+    needs: [build, dependency-check, security-lint, sonar]
     # ⭐ AMÉLIORATION: Docker build pour develop (staging) et main (release)
+    # Guard: ne jamais lancer sur schedule (uniquement sur push)
     if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     concurrency:
-      group: docker-build-backend
+      group: docker-build-backend-${{ github.ref_name }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -454,7 +648,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            # latest sera poussé uniquement dans docker-tag-release après succès de release
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -480,7 +674,7 @@ jobs:
     # Permissif sur develop (staging peut échouer sans bloquer)
     continue-on-error: true
     concurrency:
-      group: deploy-staging
+      group: deploy-staging-${{ github.ref_name }}
       cancel-in-progress: false
     steps:
       - name: Checkout code
@@ -684,6 +878,10 @@ jobs:
       - name: Deploy to staging VM
         if: steps.ssh_test.outputs.ssh_ok == 'true'
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GITHUB_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -692,6 +890,7 @@ jobs:
           command_timeout: 300s  # 5 minutes pour le script (pull image + démarrage Spring Boot)
           debug: false
           use_insecure_cipher: false
+          envs: GHCR_TOKEN,GHCR_USERNAME,GITHUB_ACTOR
           script: |
             set -euo pipefail  # Mode strict : erreur si variable non définie
             cd /opt/hotel-ticket-hub-backend-staging
@@ -701,15 +900,23 @@ jobs:
             sudo systemctl stop hotel-ticket-hub-backend-staging 2>/dev/null || true
             sudo systemctl disable hotel-ticket-hub-backend-staging 2>/dev/null || true
             
-            # Stop any container using port 8081
+            # Stop container by name (plus fiable que filter publish=)
+            echo "Stopping backend container by name..."
+            docker stop hotel-ticket-hub-backend-staging 2>/dev/null || true
+            docker rm hotel-ticket-hub-backend-staging 2>/dev/null || true
+            
+            # Fallback: Stop any container using port 8081 (si le nom a changé)
             CONTAINERS=$(docker ps -q --filter "publish=8081" 2>/dev/null || true)
             if [ -n "$CONTAINERS" ]; then
+              echo "Found containers on port 8081, stopping them..."
               docker stop $CONTAINERS 2>/dev/null || true
+              docker rm $CONTAINERS 2>/dev/null || true
             fi
             
-            # Stop any container using port 9100 (Node Exporter)
+            # Stop any container using port 9100 (Node Exporter) - fallback par port
             CONTAINERS_9100=$(docker ps -q --filter "publish=9100" 2>/dev/null || true)
             if [ -n "$CONTAINERS_9100" ]; then
+              echo "Found containers on port 9100, stopping them..."
               docker stop $CONTAINERS_9100 2>/dev/null || true
               docker rm $CONTAINERS_9100 2>/dev/null || true
             fi
@@ -721,56 +928,169 @@ jobs:
             fi
             
             echo "Connecting to GitHub Container Registry..."
-            # Utiliser GHCR_TOKEN si défini (PAT), sinon GITHUB_TOKEN
-            if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-              # PAT avec username explicite si défini, sinon github.actor
-              GHCR_USER="${GHCR_USERNAME:-${{ github.actor }}}"
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            else
-              # Fallback sur GITHUB_TOKEN (automatique)
-              echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Utiliser uniquement GHCR_TOKEN (PAT avec scope read:packages) passé via env
+            # Le secret est passé via env: du step, pas interpolé dans le script (meilleure sécurité)
+            # Note: GHCR_TOKEN doit avoir le scope 'read:packages' pour pull depuis GHCR sur une VM externe
+            if [ -z "$GHCR_TOKEN" ]; then
+              echo "ERROR: GHCR_TOKEN environment variable is required for pulling images from GHCR"
+              echo "Create a PAT with 'read:packages' scope and add it as GHCR_TOKEN secret"
+              exit 1
             fi
+            GHCR_USER="${GHCR_USERNAME:-$GITHUB_ACTOR}"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             
             echo "Pulling Docker image..."
-            export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            docker pull $DOCKER_IMAGE || docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
+            # Utiliser l'image par SHA pour garantir l'exactitude du commit déployé (zéro ambiguïté)
+            # Note: docker-compose.yml doit utiliser ${DOCKER_IMAGE} pour que cette variable soit prise en compte
+            # Exemple dans docker-compose.yml: services.backend.image: ${DOCKER_IMAGE}
+            export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}
+            docker pull $DOCKER_IMAGE || {
+              echo "⚠️  Image by SHA not found, trying branch tag..."
+              export DOCKER_IMAGE=ghcr.io/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+              docker pull $DOCKER_IMAGE || docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
+            }
+            
+            echo "Verifying Docker Compose version..."
+            docker compose version || {
+              echo "ERROR: docker compose (v2) not found. Checking docker-compose (v1)..."
+              docker-compose version || {
+                echo "ERROR: Neither docker compose nor docker-compose found"
+                exit 1
+              }
+              COMPOSE_CMD="docker-compose"
+            }
+            COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
             
             echo "Starting/Updating container (force recreate if needed)..."
-            export DOCKER_IMAGE=$DOCKER_IMAGE
+            # Vérifier que docker-compose.yml utilise bien ${DOCKER_IMAGE} (sinon le tag SHA sera ignoré)
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Verifying docker-compose.yml configuration..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Using DOCKER_IMAGE=$DOCKER_IMAGE"
+            echo ""
+            echo "Checking docker-compose.yml for image configuration:"
+            grep -n "image:" docker-compose.yml || echo "⚠️  No 'image:' found in docker-compose.yml"
+            if ! grep -q '\${DOCKER_IMAGE}' docker-compose.yml && ! grep -q '\$DOCKER_IMAGE' docker-compose.yml; then
+              if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+                echo "❌ ERROR: main branch requires docker-compose.yml to use \${DOCKER_IMAGE} variable"
+                echo "   This ensures deployment uses the exact commit SHA image (zero ambiguity)."
+                echo "   Fix: Add 'services.backend.image: \${DOCKER_IMAGE}' to docker-compose.yml"
+                exit 1
+              else
+                echo "⚠️  WARNING: docker-compose.yml may not use \${DOCKER_IMAGE} variable"
+                echo "   To use the exact commit SHA image, ensure docker-compose.yml has:"
+                echo "   services.backend.image: \${DOCKER_IMAGE}"
+                echo "   Otherwise, Docker Compose will use a hardcoded image tag."
+              fi
+            else
+              echo "✓ docker-compose.yml references DOCKER_IMAGE variable"
+            fi
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Docker Compose charge automatiquement le fichier .env dans le même répertoire
+            # Pas besoin de source .env (évite les problèmes avec valeurs complexes/commentaires)
+            # On exporte uniquement DOCKER_IMAGE qui doit être disponible pour docker-compose.yml
+            # Les autres variables du .env seront chargées automatiquement par Docker Compose
+            
+            # Utiliser un project name fixe pour éviter les surprises de noms de containers
+            # Cela rend les logs et ps plus prévisibles
+            COMPOSE_PROJECT_NAME="hotel-ticket-hub-backend-staging"
+            
             # Utiliser --force-recreate pour recréer les conteneurs avec la nouvelle image
             # sans avoir besoin de faire un 'down' complet (plus rapide)
-            docker compose --env-file .env up -d --force-recreate --remove-orphans
+            $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" up -d --force-recreate --remove-orphans
             
             echo "Waiting for container to start (30s)..."
             sleep 30
             
             echo "Checking container status..."
-            CONTAINER_ID=$(docker ps -q --filter "name=hotel-ticket-hub-backend-staging" 2>/dev/null || true)
+            # Récupérer le nom/ID réel du container via docker compose ps (plus fiable que supposer un nom fixe)
+            # Docker Compose peut nommer les containers comme <project>_<service>_1, donc on utilise compose ps
+            echo "Listing containers managed by Docker Compose:"
+            $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" ps
+            
+            # Récupérer le nom du service depuis docker-compose.yml (premier service sous services:, pas networks/volumes)
+            # Utiliser awk pour parser correctement la structure YAML et trouver le premier service
+            SERVICE_NAME=$(
+              awk '
+                $1=="services:" {in_services=1; next}
+                in_services && $1 ~ /^[a-zA-Z0-9_-]+:$/ {gsub(":","",$1); print $1; exit}
+                in_services && $1 ~ /^(networks|volumes):$/ {exit}
+              ' docker-compose.yml
+            )
+            SERVICE_NAME="${SERVICE_NAME:-backend}"
+            echo "Service name detected: $SERVICE_NAME"
+            
+            # Récupérer l'ID du container via compose ps (avec project name pour cohérence)
+            CONTAINER_ID=$($COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" ps -q "$SERVICE_NAME" 2>/dev/null | head -n 1 || true)
+            
             if [ -z "$CONTAINER_ID" ]; then
-              echo "ERROR: Container is not running"
-              echo "Checking stopped containers..."
-              docker ps -a | grep hotel-ticket-hub-backend-staging || true
+              echo "ERROR: Container not found via docker compose ps"
+              echo "Checking all containers..."
+              docker ps -a
               echo "Container logs (last 100 lines):"
-              docker compose logs --tail=100 hotel-ticket-hub-backend-staging || docker logs hotel-ticket-hub-backend-staging --tail=100 2>&1 || true
-              echo "Exit code:"
-              docker inspect hotel-ticket-hub-backend-staging --format='{{.State.ExitCode}}' 2>/dev/null || echo "Container not found"
+              $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" logs --tail=100 2>&1 || true
               exit 1
             fi
             
-            echo "Container is running (ID: $CONTAINER_ID)"
+            # Vérifier l'état du container via docker inspect
+            RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || echo "false")
+            CONTAINER_NAME=$(docker inspect -f '{{.Name}}' "$CONTAINER_ID" 2>/dev/null | sed 's|/||' || echo "unknown")
+            
+            if [ "$RUNNING" != "true" ]; then
+              echo "ERROR: Container is not running"
+              echo "Container ID: $CONTAINER_ID"
+              echo "Container name: $CONTAINER_NAME"
+              echo "Running state: $RUNNING"
+              echo "Checking stopped containers..."
+              docker ps -a | grep "$CONTAINER_NAME" || docker ps -a | grep "$CONTAINER_ID" || true
+              echo "Container logs (last 100 lines):"
+              $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" logs --tail=100 "$SERVICE_NAME" 2>&1 || docker logs "$CONTAINER_ID" --tail=100 2>&1 || true
+              echo "Exit code:"
+              docker inspect "$CONTAINER_ID" --format='{{.State.ExitCode}}' 2>/dev/null || echo "Container not found"
+              exit 1
+            fi
+            
+            echo "✓ Container is running"
+            echo "  Container ID: $CONTAINER_ID"
+            echo "  Container name: $CONTAINER_NAME"
             echo "Waiting for Spring Boot to fully start..."
-            HEALTH_CHECK_URL="http://localhost:8081/actuator/health"
             MAX_RETRIES=12  # 12 tentatives × 10s = 2 minutes max
             RETRY_COUNT=0
             HEALTHY=false
+            
+            # Note: Healthcheck depuis l'hôte nécessite que le port soit publié (ex: 8081:8080)
+            # Si le port n'est pas publié, on utilise docker exec pour checker depuis l'intérieur du container
+            echo "Note: Healthcheck requires published port 8081 (or will check inside container)"
             
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
               sleep 10
               RETRY_COUNT=$((RETRY_COUNT + 1))
               echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES..."
               
-              if curl -f -s "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
-                echo "✓ Application is healthy!"
+              # Vérifier d'abord le HEALTHCHECK Docker si défini dans l'image
+              HEALTH_STATUS=$(docker inspect "$CONTAINER_ID" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+              if [ "$HEALTH_STATUS" = "healthy" ]; then
+                echo "✓ Application is healthy (Docker HEALTHCHECK)!"
+                HEALTHY=true
+                break
+              elif [ "$HEALTH_STATUS" = "starting" ]; then
+                echo "  Docker HEALTHCHECK is starting (waiting for health probe)..."
+              fi
+              
+              # Essayer depuis l'hôte (si port publié)
+              if curl -f -s "http://localhost:8081/actuator/health" > /dev/null 2>&1; then
+                echo "✓ Application is healthy (host check)!"
+                HEALTHY=true
+                break
+              # Sinon, essayer depuis l'intérieur du container avec curl
+              elif docker exec "$CONTAINER_ID" sh -c "command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1" 2>/dev/null; then
+                echo "✓ Application is healthy (container check via curl)!"
+                HEALTHY=true
+                break
+              # Fallback sur wget si curl n'est pas disponible
+              elif docker exec "$CONTAINER_ID" sh -c "command -v wget >/dev/null 2>&1 && wget -qO- http://localhost:8080/actuator/health >/dev/null 2>&1" 2>/dev/null; then
+                echo "✓ Application is healthy (container check via wget)!"
                 HEALTHY=true
                 break
               else
@@ -781,12 +1101,15 @@ jobs:
             if [ "$HEALTHY" = false ]; then
               echo "WARNING: Health check failed after $MAX_RETRIES attempts, but container is running"
               echo "Recent logs:"
-              docker compose logs --tail=50 hotel-ticket-hub-backend-staging || docker logs hotel-ticket-hub-backend-staging --tail=50 2>&1 || true
+              $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" logs --tail=50 "$SERVICE_NAME" 2>&1 || docker logs "$CONTAINER_ID" --tail=50 2>&1 || true
               echo "Container status:"
-              docker ps --filter "name=hotel-ticket-hub-backend-staging" || true
+              docker ps -a | grep "$CONTAINER_NAME" || docker ps -a | grep "$CONTAINER_ID" || true
             fi
             
             echo "Backend deployed successfully!"
+            
+            # Nettoyer les credentials Docker (bonne pratique de sécurité)
+            docker logout ghcr.io || true
             
             # Vérification finale de l'accessibilité depuis l'extérieur
             echo ""
@@ -843,7 +1166,7 @@ jobs:
     timeout-minutes: 15
     continue-on-error: true
     concurrency:
-      group: deploy-monitoring
+      group: deploy-monitoring-${{ github.ref_name }}
       cancel-in-progress: false
     
     steps:
@@ -1035,7 +1358,9 @@ jobs:
             docker ps -a --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker rm 2>/dev/null || true
             
             # Supprimer les images non utilisées (sauf celles du monitoring)
-            echo "Removing unused images (preserving monitoring images)..."
+            # Supprimer les images non utilisées de +24h (les conteneurs monitoring en cours utilisent leurs images)
+            # Note: Les images utilisées par les conteneurs actifs ne seront pas supprimées
+            echo "Removing unused images (older than 24h)..."
             docker image prune -af --filter "until=24h" || true
             
             # Nettoyer le build cache uniquement
@@ -1065,17 +1390,18 @@ jobs:
             echo "Disk space after cleanup:"
             df -h / | tail -1
             
-            # Si le disque est toujours plein, essayer de nettoyer les snapshots containerd
+            # Si le disque est toujours plein, afficher un warning (ne pas supprimer containerd snapshots - trop risqué)
             DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
             if [ "$DISK_USAGE" -gt 90 ]; then
-              echo "WARNING: Disk still above 90%, cleaning containerd snapshots..."
-              # Nettoyer les snapshots containerd (nécessite d'arrêter Docker, mais on essaie quand même)
-              systemctl stop docker 2>/dev/null || true
-              rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/* 2>/dev/null || true
-              systemctl start docker 2>/dev/null || true
-              sleep 5
-              echo "Final disk space:"
-              df -h / | tail -1
+              echo "⚠️  WARNING: Disk usage is still above 90% ($DISK_USAGE%)"
+              echo "   Manual intervention required:"
+              echo "   - Consider increasing EBS volume size (AWS)"
+              echo "   - Review and remove old Docker images manually"
+              echo "   - Do NOT delete containerd snapshots (can break Docker)"
+              echo "   Current disk usage:"
+              df -h /
+              echo "   Docker disk usage:"
+              docker system df || true
             fi
             
             # Vérifier l'espace disque avant de pull les images
@@ -1089,13 +1415,24 @@ jobs:
               exit 1
             fi
             
+            echo "Verifying Docker Compose version..."
+            docker compose version || {
+              echo "ERROR: docker compose (v2) not found. Checking docker-compose (v1)..."
+              docker-compose version || {
+                echo "ERROR: Neither docker compose nor docker-compose found"
+                exit 1
+              }
+              COMPOSE_CMD="docker-compose"
+            }
+            COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
+            
             echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
-            docker compose -f docker-compose.monitoring.yml pull
+            $COMPOSE_CMD -f docker-compose.monitoring.yml pull
             
             echo "Starting monitoring stack..."
             # Démarrer avec gestion d'erreur pour le réseau
             set +e  # Ne pas arrêter sur les erreurs
-            docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+            $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
             COMPOSE_EXIT_CODE=$?
             set -e  # Réactiver l'arrêt sur erreur
             
@@ -1118,10 +1455,10 @@ jobs:
                 docker network rm monitoring-network 2>/dev/null || docker network prune -f
                 sleep 3
                 echo "Retrying startup..."
-                docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+                $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
               else
                 echo "ERROR: Non-network related error, see logs"
-                docker compose -f docker-compose.monitoring.yml logs
+                $COMPOSE_CMD -f docker-compose.monitoring.yml logs
                 exit 1
               fi
             fi
@@ -1130,7 +1467,7 @@ jobs:
             sleep 30
             
             echo "Container status:"
-            docker compose -f docker-compose.monitoring.yml ps
+            $COMPOSE_CMD -f docker-compose.monitoring.yml ps
             
             echo "Checking services..."
             
@@ -1143,7 +1480,7 @@ jobs:
               echo "Prometheus is running: $PROMETHEUS_STATUS"
             else
               echo "ERROR: Prometheus container is not running"
-              docker compose -f docker-compose.monitoring.yml logs prometheus | tail -30
+              $COMPOSE_CMD -f docker-compose.monitoring.yml logs prometheus | tail -30
               exit 1
             fi
             
@@ -1164,7 +1501,7 @@ jobs:
                 # Vérifier à nouveau si Grafana est toujours en cours d'exécution
                 if ! docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana; then
                   echo "ERROR: Grafana container stopped during startup"
-                  docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
+                  $COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50
                   exit 1
                 fi
               fi
@@ -1175,7 +1512,7 @@ jobs:
               echo "Checking all containers:"
               docker ps -a | grep grafana || echo "No grafana container found"
               echo "Grafana logs:"
-              docker compose -f docker-compose.monitoring.yml logs grafana | tail -50
+              $COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50
               exit 1
             fi
             
@@ -1190,7 +1527,7 @@ jobs:
             done
             
             echo "Recent logs (last 10 lines):"
-            docker compose -f docker-compose.monitoring.yml logs --tail=10
+            $COMPOSE_CMD -f docker-compose.monitoring.yml logs --tail=10
             
             echo "Monitoring stack deployed successfully!"
             echo "Prometheus should now scrape the backend on ${{ secrets.STAGING_HOST }}:8081"
@@ -1208,6 +1545,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test, coverage, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    outputs:
+      package_exists: ${{ steps.verify_package.outputs.package_exists }}
     permissions:
       contents: write
       issues: write
@@ -1218,77 +1560,156 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Sécuriser : vérifier que package.json existe (requis pour semantic-release)
+      - name: Verify package.json exists
+        id: verify_package
+        run: |
+          if [ ! -f "package.json" ]; then
+            echo "package_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  package.json not found. Release job requires package.json for semantic-release."
+            echo "Skipping release job (this is expected if package.json doesn't exist)."
+          else
+            echo "package_exists=true" >> $GITHUB_OUTPUT
+            echo "✓ package.json found"
+          fi
+
+      # Indiquer clairement que le job est skip si package.json n'existe pas
+      # (Les steps suivants sont conditionnels avec if: package_exists == 'true', donc ils ne s'exécuteront pas)
+      - name: Skip release job if package.json missing
+        if: steps.verify_package.outputs.package_exists != 'true'
+        run: |
+          echo "Skipping release (no package.json)."
 
       - name: Setup Node.js
+        if: steps.verify_package.outputs.package_exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Cache désactivé car package-lock.json n'existe pas encore
-          # cache: 'npm'
-          # cache-dependency-path: package-lock.json
+          # Cache npm sans cache-dependency-path pour tolérance si package-lock.json absent
+          # Le cache fonctionne quand même mais est moins précis sans lockfile
+          cache: 'npm'
 
       - name: Install semantic-release dependencies
+        if: steps.verify_package.outputs.package_exists == 'true'
         run: |
-          # Clean install to avoid corrupted node_modules
-          echo "Cleaning previous installations..."
-          rm -rf node_modules
-          
-          # Install dependencies with legacy peer deps to avoid conflicts
-          echo "Installing dependencies..."
-          npm install --legacy-peer-deps --no-audit --no-fund
-          
-          # Verify and reinstall critical dependencies if needed
-          echo "Verifying critical dependencies..."
-          if ! npm list semantic-release > /dev/null 2>&1; then
-            echo "Reinstalling semantic-release..."
-            npm install semantic-release --legacy-peer-deps --no-audit --no-fund
+          # Utiliser npm ci si package-lock.json existe (plus rapide et reproductible)
+          # Sinon fallback sur npm install
+          if [ -f "package-lock.json" ]; then
+            echo "Using npm ci (package-lock.json found) - faster and more reproducible"
+            npm ci --legacy-peer-deps --no-audit --no-fund
+          else
+            echo "Using npm install (no package-lock.json found)"
+            rm -rf node_modules
+            npm install --legacy-peer-deps --no-audit --no-fund
           fi
           
-          if ! npm list @semantic-release/exec > /dev/null 2>&1; then
-            echo "Installing @semantic-release/exec..."
-            npm install @semantic-release/exec --legacy-peer-deps --no-audit --no-fund
-          fi
-          
-          # Verify yargs is properly installed (it's a dependency of semantic-release)
-          if ! npm list yargs > /dev/null 2>&1; then
-            echo "Reinstalling yargs..."
-            npm install yargs --legacy-peer-deps --no-audit --no-fund
-          fi
-          
-          # Rebuild node_modules to fix any missing files
-          echo "Rebuilding node_modules..."
-          npm rebuild --legacy-peer-deps || true
-          
-          # Ensure binaries have execute permissions
-          echo "Setting execute permissions..."
-          chmod +x node_modules/.bin/* 2>/dev/null || true
-          
-          # Verify semantic-release binary exists and is executable
+          # Vérification basique : semantic-release doit être disponible
           if [ ! -f "node_modules/.bin/semantic-release" ]; then
-            echo "ERROR: semantic-release binary not found"
-            ls -la node_modules/.bin/ | head -20
+            echo "ERROR: semantic-release binary not found after installation"
+            echo "This should not happen with npm ci. Checking installation..."
+            npm list semantic-release || true
             exit 1
           fi
           
-          # Verify yargs module structure
-          if [ ! -f "node_modules/yargs/build/lib/yargs-factory.js" ]; then
-            echo "WARNING: yargs-factory.js not found, reinstalling yargs..."
-            npm uninstall yargs
-            npm install yargs --legacy-peer-deps --no-audit --no-fund
-          fi
-          
           echo "✓ Dependencies installed successfully"
-          echo "Verifying installation..."
-          npm list semantic-release yargs @semantic-release/exec
+          echo "Verifying semantic-release is available..."
+          npm list semantic-release --depth=0 || true
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
+        if: steps.verify_package.outputs.package_exists == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
 
       - name: Run semantic-release
+        if: steps.verify_package.outputs.package_exists == 'true'
+        id: semantic_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
+  # ============================================
+  # DOCKER TAG RELEASE (tag versionné après semantic-release)
+  # ============================================
+  docker-tag-release:
+    name: Backend - Docker Tag Release Version
+    runs-on: ubuntu-latest
+    needs: [release, docker-build]
+    # Ne s'exécute que si release a réussi ET package.json existe (semantic-release a pu créer un tag)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.result == 'success' && needs.release.outputs.package_exists == 'true'
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest Git tag (version)
+        id: git_tag
+        run: |
+          # Récupérer le tag Git qui correspond exactement au commit courant (plus sûr que git describe)
+          # semantic-release tag toujours HEAD, donc on vérifie que le tag existe sur ce commit
+          # Si plusieurs tags existent sur HEAD, prendre le plus haut (v2.3.1 > v2.3.0)
+          LATEST_TAG=$(git tag --points-at HEAD --sort=-v:refname | head -n 1 || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  No Git tag found on current commit. Skipping Docker release tag."
+            exit 0
+          fi
+          # Enlever le préfixe "v" pour le tag Docker (v1.2.3 -> 1.2.3)
+          VERSION="${LATEST_TAG#v}"
+          echo "✓ Found Git tag on current commit: $LATEST_TAG (docker tag: $VERSION)"
+          echo "tag_exists=true" >> $GITHUB_OUTPUT
+          echo "git_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        if: steps.git_tag.outputs.tag_exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: steps.git_tag.outputs.tag_exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag Docker image with release version (from commit SHA)
+        if: steps.git_tag.outputs.tag_exists == 'true'
+        run: |
+          # Image exacte produite par docker-build pour ce commit (plus sûr que :main)
+          SOURCE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}"
+          TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.git_tag.outputs.version }}"
+          LATEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          
+          echo "Tagging Docker image with version..."
+          echo "Source: $SOURCE_IMAGE"
+          echo "Target version: $TARGET_IMAGE"
+          echo "Target latest: $LATEST_IMAGE"
+          
+          # Pull l'image source par SHA (garantit que c'est l'image du commit release)
+          echo "Expected source tag: main-${{ github.sha }}"
+          docker pull "$SOURCE_IMAGE" || {
+            echo "❌ ERROR: Source image not found. docker-build may have failed for this commit."
+            echo "Expected image: $SOURCE_IMAGE"
+            echo "If missing: check docker-build logs and GHCR permissions."
+            exit 1
+          }
+          
+          # Tag l'image avec la version (sans le préfixe "v")
+          docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+          docker push "$TARGET_IMAGE"
+          echo "✓ Successfully pushed version tag: $TARGET_IMAGE"
+          
+          # Tag et push latest uniquement après succès de release (plus propre que dans docker-build)
+          docker tag "$SOURCE_IMAGE" "$LATEST_IMAGE"
+          docker push "$LATEST_IMAGE"
+          echo "✓ Successfully pushed latest tag: $LATEST_IMAGE"
