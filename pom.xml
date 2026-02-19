@@ -14,7 +14,7 @@
     
     <groupId>com.hotel</groupId>
     <artifactId>ticket-hub-backend</artifactId>
-    <version>1.11.1</version>
+    <version>1.11.2</version>
     <name>Hotel Ticket Hub Backend</name>
     <description>Backend API for Hotel Ticket Management System</description>
     

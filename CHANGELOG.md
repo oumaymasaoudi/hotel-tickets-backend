@@ -1,3 +1,10 @@
+## [1.11.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.1...v1.11.2) (2026-02-19)
+
+
+### Bug Fixes
+
+* pipline ([f10e28c](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/f10e28c16378c03a24a46f7187121a958456dfee))
+
 ## [1.11.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.0...v1.11.1) (2026-02-19)
 
 
