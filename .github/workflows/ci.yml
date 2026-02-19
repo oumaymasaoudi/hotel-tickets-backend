@@ -16,7 +16,7 @@ name: Backend CI/CD Pipeline
 # 5. ✅ Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
 # 6. ✅ Build accéléré par cache Maven (chaque job = VM séparée, pas de réutilisation directe)
 # 7. ✅ Staging uniquement sur develop, main pour release
-# 8. ✅ OWASP Dependency Check Action @v1.11.2 et Trivy @0.28.0 (versions stables)
+# 8. ✅ OWASP Dependency Check Action @main (temporaire, Dependabot découvrira la version taguée) et Trivy @0.28.0
 # 9. ✅ OWASP et security-lint bloquants sur main
 
 on:
@@ -483,7 +483,10 @@ jobs:
       # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
       # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@v1.11.2
+        # Note: Utilisation temporaire de @main jusqu'à ce que Dependabot découvre les versions taguées disponibles
+        # Dependabot proposera automatiquement une PR avec la bonne version taguée quand disponible
+        # Pour vérifier les versions disponibles: https://github.com/dependency-check/Dependency-Check_Action/releases
+        uses: dependency-check/Dependency-Check_Action@main
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
