@@ -367,9 +367,14 @@ jobs:
       # Compiler les classes principales ET les classes de test pour Sonar
       # SonarCloud a besoin de target/classes ET target/test-classes
       # Pas besoin d'exécuter les tests car jacoco.xml est déjà disponible
-      # Utiliser -Dmaven.test.skip=true en plus de -DskipTests pour éviter tout hook de test
+      # Important: compiler d'abord les classes principales, puis les test classes
+      # Ne pas utiliser -Dmaven.test.skip=true car cela empêche la compilation des test classes
       - name: Compile classes and test classes for Sonar
-        run: mvn -B test-compile -DskipTests=true -Dmaven.test.skip=true -DskipITs
+        run: |
+          # Compiler les classes principales
+          mvn -B compile -DskipTests=true -DskipITs
+          # Compiler les classes de test (sans -Dmaven.test.skip pour permettre la compilation)
+          mvn -B test-compile -DskipTests=true -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
