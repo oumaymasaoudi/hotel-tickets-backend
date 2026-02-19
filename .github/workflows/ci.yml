@@ -823,7 +823,7 @@ jobs:
 
       - name: Prepare staging directory
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -863,7 +863,7 @@ jobs:
       
       - name: Verify docker-compose file copied
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -881,7 +881,7 @@ jobs:
 
       - name: Deploy to staging VM
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USERNAME: ${{ github.actor }}
@@ -1224,7 +1224,7 @@ jobs:
           echo "SSH connection OK"
 
       - name: Prepare monitoring directory
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
@@ -1299,7 +1299,7 @@ jobs:
           fi
       
       - name: Verify monitoring files copied
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
@@ -1316,7 +1316,7 @@ jobs:
             fi
 
       - name: Deploy Monitoring Stack
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
