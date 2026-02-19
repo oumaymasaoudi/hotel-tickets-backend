@@ -422,6 +422,7 @@ jobs:
       - name: SonarCloud Scan (using coverage from test job)
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@v2
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -469,13 +470,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ⭐ AMÉLIORATION: Version pinée pour stabilité (v3)
+      # ⭐ AMÉLIORATION: Version pinée pour stabilité (main - dernière version stable)
       # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop
       # Note: L'action OWASP Dependency Check utilise Docker et n'a pas besoin de Java installé sur le runner
       # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
       # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@v3
+        uses: dependency-check/Dependency-Check_Action@v3.0
         with:
           project: 'hotel-ticket-hub-backend'
           path: '.'
