@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Grouper toutes les actions GitHub dans une seule PR (plus propre)
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     # Ignorer les mises à jour majeures automatiques (ex: v1 -> v2)
     # pour éviter les breaking changes non testés
     ignore:
