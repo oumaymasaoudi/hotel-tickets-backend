@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.11.0...v1.11.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* yml ([7b9ad2e](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/7b9ad2e2ce1f65b7a0605c1159c30fa1b72e6cbd))
+
 # [1.11.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.10.7...v1.11.0) (2026-02-18)
 
 
