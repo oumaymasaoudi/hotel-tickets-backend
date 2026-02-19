@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.0...v1.13.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* corriger compilation test-classes pour SonarCloud (sÃ©parer compile et test-compile) ([311ac87](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/311ac87bb37ced5c55aee2ca31c13a190a5fe23a))
+
 # [1.13.0](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.12.1...v1.13.0) (2026-02-19)
 
 
