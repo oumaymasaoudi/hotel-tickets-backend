@@ -44,7 +44,7 @@ public class GlobalExceptionHandler {
         error.put("code", "VALIDATION_ERROR");
 
         Map<String, String> fieldErrors = new HashMap<>();
-        e.getBindingResult().getAllErrors().forEach((err) -> {
+        e.getBindingResult().getAllErrors().forEach(err -> {
             String fieldName = ((FieldError) err).getField();
             String errorMessage = err.getDefaultMessage();
             fieldErrors.put(fieldName, errorMessage != null ? errorMessage : "Valeur invalide");

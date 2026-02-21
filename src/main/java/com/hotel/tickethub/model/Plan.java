@@ -1,5 +1,6 @@
 package com.hotel.tickethub.model;
 
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.hotel.tickethub.model.enums.SubscriptionPlan;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -25,7 +26,26 @@ public class Plan {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, unique = true)
+    @JsonValue
     private SubscriptionPlan name;
+    
+    /**
+     * Méthode sécurisée pour obtenir le nom du plan
+     * Retourne STARTER si le plan est null ou invalide
+     */
+    public SubscriptionPlan getNameSafe() {
+        if (name == null) {
+            return SubscriptionPlan.STARTER;
+        }
+        try {
+            // Vérifier que le nom est valide
+            SubscriptionPlan.valueOf(name.name());
+            return name;
+        } catch (IllegalArgumentException e) {
+            // Si le nom n'est pas valide, retourner STARTER par défaut
+            return SubscriptionPlan.STARTER;
+        }
+    }
 
     @Column(name = "base_cost", nullable = false)
     private BigDecimal baseCost;

@@ -27,12 +27,12 @@ public class TicketController {
     public ResponseEntity<TicketResponse> createTicket(
             @Valid @RequestPart("ticket") CreateTicketRequest request,
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
-        try {
-            return ResponseEntity.ok(ticketService.createTicket(request, images));
-        } catch (RuntimeException e) {
-            // Retourner une erreur 400 avec le message d'erreur
-            return ResponseEntity.badRequest().build();
-        }
+        // Laisser GlobalExceptionHandler gérer les exceptions
+        TicketResponse response = ticketService.createTicket(request, images);
+        return ResponseEntity
+                .status(org.springframework.http.HttpStatus.CREATED)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(response);
     }
 
     @GetMapping("/public/{ticketNumber}")
@@ -63,7 +63,7 @@ public class TicketController {
     }
 
     @GetMapping("/hotel/{hotelId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'TECHNICIAN')")
     public ResponseEntity<List<TicketResponse>> getTicketsByHotel(@PathVariable UUID hotelId) {
         try {
             log.debug("Fetching tickets for hotel: {}", hotelId);
@@ -104,9 +104,9 @@ public class TicketController {
             @Valid @RequestBody UpdateTicketStatusRequest request,
             @RequestParam UUID userId) {
         try {
-            log.debug("Updating ticket status - ticketId: {}, userId: {}, status: {}, technicianId: {}", 
-                ticketId, userId, request.getStatus(), request.getTechnicianId());
-            
+            log.debug("Updating ticket status - ticketId: {}, userId: {}, status: {}, technicianId: {}",
+                    ticketId, userId, request.getStatus(), request.getTechnicianId());
+
             TicketResponse result = ticketService.updateTicketStatus(ticketId, request, userId);
             log.info("Ticket status updated successfully - ticketId: {}, status: {}", ticketId, request.getStatus());
             return ResponseEntity.ok(result);

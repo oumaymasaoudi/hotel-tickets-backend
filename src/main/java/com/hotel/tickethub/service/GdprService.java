@@ -35,7 +35,9 @@ public class GdprService {
     private final PaymentRepository paymentRepository;
     private final AuditLogRepository auditLogRepository;
     private final AuditLogService auditLogService;
-    private final String PRIVACY_POLICY_VERSION = "1.0";
+    private static final String PRIVACY_POLICY_VERSION = "1.0";
+    private static final String USER_NOT_FOUND_MESSAGE = "User not found";
+    private static final String CREATED_AT_FIELD = "createdAt";
 
     /**
      * Enregistrer ou mettre à jour un consentement RGPD
@@ -43,7 +45,7 @@ public class GdprService {
      */
     public GdprConsent recordConsent(UUID userId, String consentType, Boolean consented, String ipAddress, String userAgent) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
 
         GdprConsent existingConsent = consentRepository
                 .findByUserIdAndConsentType(userId, consentType)
@@ -107,7 +109,7 @@ public class GdprService {
      */
     public Map<String, Object> exportUserData(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
 
         Map<String, Object> data = new HashMap<>();
         
@@ -118,7 +120,7 @@ public class GdprService {
         profile.put("fullName", user.getFullName());
         profile.put("phone", user.getPhone());
         profile.put("photoUrl", user.getPhotoUrl());
-        profile.put("createdAt", user.getCreatedAt());
+        profile.put(CREATED_AT_FIELD, user.getCreatedAt());
         profile.put("updatedAt", user.getUpdatedAt());
         data.put("profile", profile);
 
@@ -132,7 +134,7 @@ public class GdprService {
                     t.put("description", ticket.getDescription());
                     t.put("status", ticket.getStatus());
                     t.put("isUrgent", ticket.getIsUrgent());
-                    t.put("createdAt", ticket.getCreatedAt());
+                    t.put(CREATED_AT_FIELD, ticket.getCreatedAt());
                     t.put("updatedAt", ticket.getUpdatedAt());
                     return t;
                 })
@@ -151,7 +153,7 @@ public class GdprService {
                         p.put("status", payment.getStatus());
                         p.put("paymentMethod", payment.getPaymentMethod());
                         p.put("paymentDate", payment.getPaymentDate());
-                        p.put("createdAt", payment.getCreatedAt());
+                        p.put(CREATED_AT_FIELD, payment.getCreatedAt());
                         // Ne pas inclure les données sensibles (numéro de carte, etc.)
                         return p;
                     })
@@ -208,7 +210,7 @@ public class GdprService {
      */
     public DataDeletionRequest requestDataDeletion(UUID userId, String ipAddress) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
 
         // Vérifier s'il existe déjà une demande en cours
         List<DataDeletionRequest> pendingRequests = deletionRequestRepository

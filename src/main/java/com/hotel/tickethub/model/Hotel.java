@@ -1,5 +1,6 @@
 package com.hotel.tickethub.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -44,9 +45,11 @@ public class Hotel {
     private LocalDateTime nextPaymentDate;
 
     @OneToMany(mappedBy = "hotel", cascade = CascadeType.ALL)
+    @JsonIgnore // Prevent serialization issues
     private List<User> users;
 
     @OneToMany(mappedBy = "hotel", cascade = CascadeType.ALL)
+    @JsonIgnore // Prevent serialization issues
     private List<Ticket> tickets;
 
     @CreatedDate
