@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.1...v1.13.2) (2026-02-21)
+
+
+### Bug Fixes
+
+* corriger problÃ¨mes SonarCloud - code smells, bugs et amÃ©liorations ([6ca7c69](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/6ca7c691664f729b4a37d1fea6b21e797ac16845))
+
 ## [1.13.1](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.0...v1.13.1) (2026-02-19)
 
 
