@@ -1,3 +1,10 @@
+## [1.13.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.2...v1.13.3) (2026-02-21)
+
+
+### Bug Fixes
+
+* amÃ©liorer diagnostic Trivy - ajouter scan table et dÃ©sactiver secret scanning ([2bd56de](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/2bd56def9836d52f0e3a29c82268d44450d590e1))
+
 ## [1.13.2](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.1...v1.13.2) (2026-02-21)
 
 
