@@ -61,7 +61,7 @@ class TicketControllerTest {
         }
 
         @Test
-        void testCreateTicket_Success() throws Exception {
+        void testCreateTicket_Success() {
                 // Given
                 when(ticketService.createTicket(any(CreateTicketRequest.class), anyList()))
                                 .thenReturn(ticketResponse);

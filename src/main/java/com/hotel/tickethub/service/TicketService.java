@@ -268,7 +268,7 @@ public class TicketService {
             }
         } catch (IOException e) {
             // Log but don't fail if file deletion fails
-            System.err.println("Failed to delete image file: " + e.getMessage());
+            log.warn("Failed to delete image file: {}", e.getMessage());
         }
 
         // Delete the database record
@@ -328,7 +328,7 @@ public class TicketService {
         }
 
         // Vérifier la taille (max 10MB)
-        long maxSize = 10 * 1024 * 1024; // 10MB
+        long maxSize = 10L * 1024L * 1024L; // 10MB
         if (file.getSize() > maxSize) {
             throw new RuntimeException("Le fichier est trop volumineux. Taille maximale: 10MB");
         }

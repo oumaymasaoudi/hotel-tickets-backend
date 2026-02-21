@@ -41,8 +41,8 @@ public class StripeService {
             throw new RuntimeException("Clé API Stripe non configurée. Veuillez configurer stripe.secret.key dans application.properties");
         }
 
-        // Initialiser Stripe avec la clé secrète
-        Stripe.apiKey = stripeSecretKey;
+        // Initialiser Stripe avec la clé secrète (thread-safe)
+        initializeStripe();
 
         // Récupérer le plan
         Plan plan = planRepository.findById(planId)
@@ -93,8 +93,19 @@ public class StripeService {
      * Récupérer les détails d'une session Stripe
      */
     public Session getSession(String sessionId) throws StripeException {
-        Stripe.apiKey = stripeSecretKey;
+        initializeStripe();
         return Session.retrieve(sessionId);
+    }
+
+    /**
+     * Initialiser Stripe de manière thread-safe
+     */
+    private void initializeStripe() {
+        synchronized (StripeService.class) {
+            if (!stripeSecretKey.equals(Stripe.apiKey)) {
+                Stripe.apiKey = stripeSecretKey;
+            }
+        }
     }
 }
 

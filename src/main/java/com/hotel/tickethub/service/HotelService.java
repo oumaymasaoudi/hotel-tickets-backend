@@ -39,7 +39,7 @@ public class HotelService {
             }
 
             return hotels.stream()
-                    .filter(hotel -> hotel != null) // Filtrer les hôtels null
+                    .filter(java.util.Objects::nonNull) // Filtrer les hôtels null
                     .map(hotel -> {
                         try {
                             return convertToDTO(hotel);
@@ -49,7 +49,7 @@ public class HotelService {
                             return null; // Retourner null pour cet hôtel, sera filtré ensuite
                         }
                     })
-                    .filter(dto -> dto != null) // Filtrer les DTOs null en cas d'erreur
+                    .filter(java.util.Objects::nonNull) // Filtrer les DTOs null en cas d'erreur
                     .toList();
         } catch (Exception e) {
             log.error("Error in getAllHotelsDTO: {}", e.getMessage(), e);
@@ -124,22 +124,9 @@ public class HotelService {
             dto.setPhone(hotel.getPhone());
 
             // Gérer le plan de manière sécurisée
-            if (hotel.getPlan() != null) {
-                dto.setPlanId(hotel.getPlan().getId());
-                try {
-                    // Utiliser getNameSafe() pour éviter les erreurs avec les plans invalides
-                    SubscriptionPlan planName = hotel.getPlan().getNameSafe();
-                    dto.setPlanName(planName != null ? planName.name() : null);
-                } catch (Exception e) {
-                    log.warn("Error getting plan name for hotel {}: {}", hotel.getId(), e.getMessage());
-                    dto.setPlanName("STARTER"); // Valeur par défaut
-                }
-            } else {
-                dto.setPlanId(null);
-                dto.setPlanName(null);
-            }
+            setPlanInfo(dto, hotel);
 
-            dto.setIsActive(hotel.getIsActive() != null ? hotel.getIsActive() : true);
+            dto.setIsActive(hotel.getIsActive() == null || hotel.getIsActive());
             return dto;
         } catch (Exception e) {
             log.error("Error converting hotel to DTO: hotelId={}, error={}",
@@ -147,6 +134,23 @@ public class HotelService {
             // Retourner null au lieu de lancer une exception pour éviter de bloquer toute
             // la liste
             return null;
+        }
+    }
+
+    private void setPlanInfo(HotelDTO dto, Hotel hotel) {
+        if (hotel.getPlan() != null) {
+            dto.setPlanId(hotel.getPlan().getId());
+            try {
+                // Utiliser getNameSafe() pour éviter les erreurs avec les plans invalides
+                SubscriptionPlan planName = hotel.getPlan().getNameSafe();
+                dto.setPlanName(planName != null ? planName.name() : null);
+            } catch (Exception e) {
+                log.warn("Error getting plan name for hotel {}: {}", hotel.getId(), e.getMessage());
+                dto.setPlanName("STARTER"); // Valeur par défaut
+            }
+        } else {
+            dto.setPlanId(null);
+            dto.setPlanName(null);
         }
     }
 }

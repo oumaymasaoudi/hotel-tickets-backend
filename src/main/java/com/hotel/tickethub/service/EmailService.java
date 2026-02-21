@@ -87,8 +87,7 @@ public class EmailService {
 
         String periodStart = "";
         String periodEnd = "";
-        if (report.get("period") instanceof Map<?, ?>) {
-            Map<?, ?> period = (Map<?, ?>) report.get("period");
+        if (report.get("period") instanceof Map<?, ?> period) {
             periodStart = period.get("start") != null ? period.get("start").toString() : "";
             periodEnd = period.get("end") != null ? period.get("end").toString() : "";
         }
@@ -131,8 +130,8 @@ public class EmailService {
         if (value == null) {
             return 0;
         }
-        if (value instanceof Number) {
-            return ((Number) value).intValue();
+        if (value instanceof Number number) {
+            return number.intValue();
         }
         return 0;
     }

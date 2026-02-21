@@ -36,7 +36,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         // Security: Block SUPERADMIN creation via public interface
-        if (request.getRole() != null && request.getRole().toUpperCase().equals("SUPERADMIN")) {
+        if (request.getRole() != null && "SUPERADMIN".equalsIgnoreCase(request.getRole())) {
             throw new RuntimeException(
                     "SuperAdmin role cannot be created via registration interface. Contact the developer.");
         }
@@ -55,14 +55,16 @@ public class AuthService {
         // Add specialties for technicians
         if (request.getSpecialties() != null && !request.getSpecialties().isEmpty()) {
             user.setSpecialties(request.getSpecialties());
+        } else {
+            // No specialties to add
         }
 
         // Business rule: Admin and Technician must be linked to a hotel
         // Rule: "Un utilisateur (technicien ou admin) est rattaché à un hôtel via son
         // HotelID"
         if (request.getRole() != null &&
-                (request.getRole().toUpperCase().equals("ADMIN") ||
-                        request.getRole().toUpperCase().equals("TECHNICIAN"))) {
+                ("ADMIN".equalsIgnoreCase(request.getRole()) ||
+                        "TECHNICIAN".equalsIgnoreCase(request.getRole()))) {
             if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
                 throw new IllegalArgumentException("An ADMIN or TECHNICIAN must be linked to a hotel");
             }
@@ -188,7 +190,7 @@ public class AuthService {
     @Transactional
     public void updateUserRole(String email, String roleName) {
         // Security: Block promotion to SUPERADMIN via this endpoint
-        if (roleName != null && roleName.toUpperCase().equals("SUPERADMIN")) {
+        if (roleName != null && "SUPERADMIN".equalsIgnoreCase(roleName)) {
             throw new RuntimeException(
                     "SuperAdmin role cannot be assigned via this endpoint. Use SQL script or dedicated endpoint.");
         }
