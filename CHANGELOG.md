@@ -1,3 +1,10 @@
+## [1.13.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.3...v1.13.4) (2026-02-21)
+
+
+### Bug Fixes
+
+* rendre Trivy non-bloquant temporairement pour diagnostic des vulnÃ©rabilitÃ©s ([ff62304](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/ff62304fd8733512e6eae272b5e2fc1c6d0d28be))
+
 ## [1.13.3](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.2...v1.13.3) (2026-02-21)
 
 
