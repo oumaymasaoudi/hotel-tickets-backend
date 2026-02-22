@@ -1,5 +1,6 @@
 package com.hotel.tickethub.service;
 
+import com.hotel.tickethub.dto.AuditLogRequest;
 import com.hotel.tickethub.model.AuditLog;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.User;
@@ -27,15 +28,48 @@ public class AuditLogService {
      * Logger une action critique
      * Règle 12: Journal des activités
      *
+     * @param request DTO contenant tous les paramètres de l'action à logger
+     */
+    public AuditLog logAction(AuditLogRequest request) {
+        String changesJson = null;
+        try {
+            if (request.getChanges() != null) {
+                changesJson = objectMapper.writeValueAsString(request.getChanges());
+            }
+        } catch (Exception e) {
+            changesJson = request.getChanges() != null ? request.getChanges().toString() : null;
+        }
+
+        AuditLog log = AuditLog.builder()
+            .user(request.getUser())
+            .action(request.getAction())
+            .entityType(request.getEntityType())
+            .entityId(request.getEntityId())
+            .hotel(request.getHotel())
+            .changes(changesJson)
+            .description(request.getDescription())
+            .ipAddress(request.getIpAddress())
+            .timestamp(LocalDateTime.now())
+            .build();
+
+        return auditLogRepository.save(log);
+    }
+
+    /**
+     * Logger une action critique (méthode de compatibilité avec l'ancienne signature)
+     * Règle 12: Journal des activités
+     *
      * @param user Utilisateur qui effectue l'action
      * @param action Type d'action (CREATE_TICKET, ASSIGN_TICKET, etc.)
      * @param entityType Type d'entité (Ticket, Payment, User, etc.)
      * @param entityId ID de l'entité affectée
-     * @param hotelId Hôtel concerné
+     * @param hotel Hôtel concerné
      * @param changes Changements effectués (JSON)
      * @param description Description textuelle
      * @param ipAddress Adresse IP
+     * @deprecated Utiliser logAction(AuditLogRequest) à la place
      */
+    @Deprecated
     public AuditLog logAction(
             User user,
             String action,
@@ -45,29 +79,17 @@ public class AuditLogService {
             Object changes,
             String description,
             String ipAddress) {
-
-        String changesJson = null;
-        try {
-            if (changes != null) {
-                changesJson = objectMapper.writeValueAsString(changes);
-            }
-        } catch (Exception e) {
-            changesJson = changes != null ? changes.toString() : null;
-        }
-
-        AuditLog log = AuditLog.builder()
-            .user(user)
-            .action(action)
-            .entityType(entityType)
-            .entityId(entityId)
-            .hotel(hotel)
-            .changes(changesJson)
-            .description(description)
-            .ipAddress(ipAddress)
-            .timestamp(LocalDateTime.now())
-            .build();
-
-        return auditLogRepository.save(log);
+        AuditLogRequest request = AuditLogRequest.builder()
+                .user(user)
+                .action(action)
+                .entityType(entityType)
+                .entityId(entityId)
+                .hotel(hotel)
+                .changes(changes)
+                .description(description)
+                .ipAddress(ipAddress)
+                .build();
+        return logAction(request);
     }
 
     /**

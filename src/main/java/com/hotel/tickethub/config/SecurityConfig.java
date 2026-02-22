@@ -58,7 +58,7 @@ public class SecurityConfig {
 
                                 // Security headers
                                 .headers(headers -> headers
-                                                .frameOptions(frameOptions -> frameOptions.deny())
+                                                .frameOptions(org.springframework.security.config.http.FrameOptionsConfig::deny)
                                                 .contentTypeOptions(contentTypeOptions -> {
                                                 })
                                                 .httpStrictTransportSecurity(hsts -> hsts

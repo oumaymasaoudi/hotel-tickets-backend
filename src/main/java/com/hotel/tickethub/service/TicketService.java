@@ -4,6 +4,10 @@ import com.hotel.tickethub.dto.CreateTicketRequest;
 import com.hotel.tickethub.dto.TicketImageDTO;
 import com.hotel.tickethub.dto.TicketResponse;
 import com.hotel.tickethub.dto.UpdateTicketStatusRequest;
+import com.hotel.tickethub.exception.BusinessException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
+import com.hotel.tickethub.exception.StorageException;
+import com.hotel.tickethub.exception.ValidationException;
 import com.hotel.tickethub.model.*;
 import com.hotel.tickethub.model.enums.TicketStatus;
 import com.hotel.tickethub.repository.*;
@@ -47,7 +51,7 @@ public class TicketService {
 
         // Vérifier que l'hôtel a un plan
         if (hotel.getPlan() == null) {
-            throw new RuntimeException(
+            throw new BusinessException(
                     "Hotel does not have a subscription plan. Please assign a plan to the hotel.");
         }
 
@@ -257,7 +261,7 @@ public class TicketService {
 
         // Verify the image belongs to the ticket
         if (!image.getTicket().getId().equals(ticketId)) {
-            throw new RuntimeException("Image does not belong to this ticket");
+            throw new ValidationException("Image does not belong to this ticket");
         }
 
         // Delete the physical file
@@ -314,7 +318,7 @@ public class TicketService {
             ticketImageRepository.save(ticketImage);
 
         } catch (IOException e) {
-            throw new RuntimeException("Failed to store image", e);
+            throw new StorageException("Failed to store image", e);
         }
     }
 
@@ -324,19 +328,19 @@ public class TicketService {
      */
     private void validateImageFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new RuntimeException("Le fichier est vide");
+            throw new ValidationException("Le fichier est vide");
         }
 
         // Vérifier la taille (max 10MB)
         long maxSize = 10L * 1024L * 1024L; // 10MB
         if (file.getSize() > maxSize) {
-            throw new RuntimeException("Le fichier est trop volumineux. Taille maximale: 10MB");
+            throw new ValidationException("Le fichier est trop volumineux. Taille maximale: 10MB");
         }
 
         // Vérifier le type MIME
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
-            throw new RuntimeException("Le fichier doit être une image");
+            throw new ValidationException("Le fichier doit être une image");
         }
 
         // Vérifier l'extension
@@ -345,14 +349,14 @@ public class TicketService {
             String extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
             List<String> allowedExtensions = List.of("jpg", "jpeg", "png", "gif", "webp");
             if (!allowedExtensions.contains(extension)) {
-                throw new IllegalArgumentException(
+                throw new ValidationException(
                         "Extension de fichier non autorisée. Extensions autorisées: " + allowedExtensions);
             }
         }
 
         // Vérifier que le nom de fichier n'est pas vide
         if (originalFilename == null || originalFilename.trim().isEmpty()) {
-            throw new RuntimeException("Le nom de fichier est invalide");
+            throw new ValidationException("Le nom de fichier est invalide");
         }
     }
 

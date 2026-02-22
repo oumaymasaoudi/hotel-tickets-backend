@@ -2,6 +2,8 @@ package com.hotel.tickethub.service;
 
 import com.hotel.tickethub.dto.CategoryDTO;
 import com.hotel.tickethub.dto.CategoryRequest;
+import com.hotel.tickethub.exception.ConflictException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.Category;
 import com.hotel.tickethub.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,14 +29,14 @@ public class CategoryService {
     public CategoryDTO getCategoryById(UUID id) {
         return categoryRepository.findById(id)
                 .map(this::convertToDTO)
-                .orElseThrow(() -> new RuntimeException("Category not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
     }
 
     @Transactional
     public CategoryDTO createCategory(CategoryRequest request) {
         // Vérifier si une catégorie avec le même nom existe déjà
         if (categoryRepository.findByName(request.getName()).isPresent()) {
-            throw new RuntimeException("Une catégorie avec ce nom existe déjà");
+            throw new ConflictException("Une catégorie avec ce nom existe déjà");
         }
 
         Category category = new Category();

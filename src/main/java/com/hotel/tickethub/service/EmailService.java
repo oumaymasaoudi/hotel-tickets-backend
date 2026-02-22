@@ -144,8 +144,8 @@ public class EmailService {
         if (value == null) {
             return 0.0;
         }
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
+        if (value instanceof Number number) {
+            return number.doubleValue();
         }
         return 0.0;
     }

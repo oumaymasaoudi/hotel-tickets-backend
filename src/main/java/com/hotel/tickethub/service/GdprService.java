@@ -1,5 +1,9 @@
 package com.hotel.tickethub.service;
 
+import com.hotel.tickethub.dto.AuditLogRequest;
+import com.hotel.tickethub.exception.ConflictException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
+import com.hotel.tickethub.exception.StorageException;
 import com.hotel.tickethub.model.*;
 import com.hotel.tickethub.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -73,16 +77,17 @@ public class GdprService {
         }
 
         // Log de l'action
-        auditLogService.logAction(
-                user,
-                "GDPR_CONSENT_" + (consented ? "GRANTED" : "REVOKED"),
-                "GdprConsent",
-                consent.getId(),
-                user.getHotel(),
-                Map.of("consentType", consentType, "consented", consented),
-                "Consentement RGPD " + (consented ? "accordé" : "révoqué") + " : " + consentType,
-                ipAddress
-        );
+        boolean isConsented = Boolean.TRUE.equals(consented);
+        auditLogService.logAction(AuditLogRequest.builder()
+                .user(user)
+                .action("GDPR_CONSENT_" + (isConsented ? "GRANTED" : "REVOKED"))
+                .entityType("GdprConsent")
+                .entityId(consent.getId())
+                .hotel(user.getHotel())
+                .changes(Map.of("consentType", consentType, "consented", consented))
+                .description("Consentement RGPD " + (isConsented ? "accordé" : "révoqué") + " : " + consentType)
+                .ipAddress(ipAddress)
+                .build());
 
         log.info("GDPR consent recorded: userId={}, type={}, consented={}", userId, consentType, consented);
         return consent;
@@ -190,16 +195,16 @@ public class GdprService {
         data.put("auditLogs", auditLogs);
 
         // Log de l'export
-        auditLogService.logAction(
-                user,
-                "GDPR_DATA_EXPORT",
-                "User",
-                userId,
-                user.getHotel(),
-                null,
-                "Export des données personnelles demandé",
-                null
-        );
+        auditLogService.logAction(AuditLogRequest.builder()
+                .user(user)
+                .action("GDPR_DATA_EXPORT")
+                .entityType("User")
+                .entityId(userId)
+                .hotel(user.getHotel())
+                .changes(null)
+                .description("Export des données personnelles demandé")
+                .ipAddress(null)
+                .build());
 
         log.info("GDPR data export completed for userId={}", userId);
         return data;
@@ -221,7 +226,7 @@ public class GdprService {
                 .toList();
 
         if (!pendingRequests.isEmpty()) {
-            throw new RuntimeException("Une demande de suppression est déjà en cours");
+            throw new ConflictException("Une demande de suppression est déjà en cours");
         }
 
         DataDeletionRequest request = DataDeletionRequest.builder()
@@ -234,16 +239,16 @@ public class GdprService {
         request = deletionRequestRepository.save(request);
 
         // Log de la demande
-        auditLogService.logAction(
-                user,
-                "GDPR_DELETION_REQUESTED",
-                "DataDeletionRequest",
-                request.getId(),
-                user.getHotel(),
-                null,
-                "Demande de suppression des données (droit à l'oubli)",
-                ipAddress
-        );
+        auditLogService.logAction(AuditLogRequest.builder()
+                .user(user)
+                .action("GDPR_DELETION_REQUESTED")
+                .entityType("DataDeletionRequest")
+                .entityId(request.getId())
+                .hotel(user.getHotel())
+                .changes(null)
+                .description("Demande de suppression des données (droit à l'oubli)")
+                .ipAddress(ipAddress)
+                .build());
 
         log.info("GDPR deletion request created: userId={}, requestId={}", userId, request.getId());
         return request;
@@ -255,10 +260,10 @@ public class GdprService {
      */
     public void processDataDeletion(UUID requestId, UUID processedByUserId) {
         DataDeletionRequest request = deletionRequestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Deletion request not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Deletion request not found"));
 
         if (request.getStatus() == DataDeletionRequest.DeletionStatus.COMPLETED) {
-            throw new RuntimeException("Cette demande a déjà été traitée");
+            throw new ConflictException("Cette demande a déjà été traitée");
         }
 
         User user = request.getUser();
@@ -299,16 +304,16 @@ public class GdprService {
             deletionRequestRepository.save(request);
 
             // Log final
-            auditLogService.logAction(
-                    processedBy,
-                    "GDPR_DELETION_COMPLETED",
-                    "DataDeletionRequest",
-                    requestId,
-                    null,
-                    Map.of("deletedUserId", user.getId().toString()),
-                    "Suppression des données complétée pour l'utilisateur : " + user.getEmail(),
-                    null
-            );
+            auditLogService.logAction(AuditLogRequest.builder()
+                    .user(processedBy)
+                    .action("GDPR_DELETION_COMPLETED")
+                    .entityType("DataDeletionRequest")
+                    .entityId(requestId)
+                    .hotel(null)
+                    .changes(Map.of("deletedUserId", user.getId().toString()))
+                    .description("Suppression des données complétée pour l'utilisateur : " + user.getEmail())
+                    .ipAddress(null)
+                    .build());
 
             log.info("GDPR deletion completed: requestId={}, userId={}", requestId, user.getId());
         } catch (Exception e) {
@@ -316,7 +321,7 @@ public class GdprService {
             request.setRejectionReason("Erreur lors du traitement : " + e.getMessage());
             deletionRequestRepository.save(request);
             log.error("Error processing GDPR deletion request: requestId={}", requestId, e);
-            throw new RuntimeException("Erreur lors de la suppression des données", e);
+            throw new StorageException("Erreur lors de la suppression des données", e);
         }
     }
 
