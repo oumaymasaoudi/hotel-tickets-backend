@@ -16,6 +16,7 @@
     <artifactId>ticket-hub-backend</artifactId>
     <version>1.13.6</version>
     <name>Hotel Ticket Hub Backend</name>
+    <!-- Pipeline CI/CD: Feature branch → PR develop → staging → PR main → release -->
     <description>Backend API for Hotel Ticket Management System</description>
     
     <properties>
