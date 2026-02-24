@@ -1,3 +1,10 @@
+## [1.13.6](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.5...v1.13.6) (2026-02-24)
+
+
+### Bug Fixes
+
+* Resolve SonarCloud issues - Use AuditLogRequest, add @Deprecated metadata, refactor tests ([41ccc97](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/41ccc979728e34b1543478cebe5a89b9c57b73dd))
+
 ## [1.13.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.4...v1.13.5) (2026-02-24)
 
 
