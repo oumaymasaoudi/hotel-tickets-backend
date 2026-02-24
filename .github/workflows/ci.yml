@@ -965,14 +965,20 @@ jobs:
             echo ""
             echo "⚠️  Note: Trivy may fail due to:"
             echo "   1. CRITICAL/HIGH vulnerabilities in dependencies"
-            echo "   2. Maven dependency version detection issues (see warning above)"
-            echo "   3. Secret scanning findings"
+            if [ "${{ steps.generate-sbom.outputs.sbom_exists }}" == "true" ]; then
+              echo "   2. SBOM scan used (more reliable, no Maven version detection issues)"
+            else
+              echo "   2. Filesystem scan used (SBOM generation failed - may have Maven version detection issues)"
+            fi
             echo ""
             echo "Check the Trivy logs above for details"
             echo "SARIF report uploaded to GitHub Security tab (if generated)"
             echo ""
             echo "To investigate:"
             echo "  - Check GitHub Security tab for detailed vulnerability report"
+            if [ "${{ steps.generate-sbom.outputs.sbom_exists }}" == "true" ]; then
+              echo "  - SBOM file: ${{ steps.generate-sbom.outputs.sbom_path }}"
+            fi
             echo "  - Review pom.xml dependencies for outdated versions"
             echo "  - Consider updating dependencies or adding suppressions"
             echo "  - Review the table format scan output above for quick overview"
