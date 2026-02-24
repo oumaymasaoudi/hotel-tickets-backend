@@ -1,3 +1,12 @@
+## [1.13.5](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.4...v1.13.5) (2026-02-24)
+
+
+### Bug Fixes
+
+* corriger tous les problÃ¨mes SonarCloud - exceptions personnalisÃ©es, complexitÃ© rÃ©duite, boolean primitif, pattern matching ([0c9df9c](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/0c9df9cfc4292bf5130cf53f3b8f96f15e83e7e0))
+* Replace RuntimeException with ResourceNotFoundException and fix SecurityConfig frameOptions ([fe33bdd](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/fe33bdd64c9a4e789ff4247f11732345298dc195))
+* Update tests to use AuditLogRequest DTO and custom exceptions ([eadb7a4](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/eadb7a468a2a0dbc68d0659ea2038bf082f09ae7))
+
 ## [1.13.4](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.3...v1.13.4) (2026-02-21)
 
 
