@@ -5,6 +5,7 @@ import com.hotel.tickethub.dto.HotelRequest;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.service.HotelService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/hotels")
 @RequiredArgsConstructor
@@ -20,7 +22,12 @@ import java.util.UUID;
         "http://localhost:8080",
         "http://localhost:8081",
         "http://localhost:5173",
-        "http://192.168.58.1:5173"
+        "http://192.168.58.1:5173",
+        "http://13.50.221.51",
+        "http://13.50.221.51:80",
+        "http://13.50.221.51:8080",
+        "https://13.50.221.51",
+        "https://13.50.221.51:443"
 })
 public class HotelRestController {
 
@@ -31,7 +38,20 @@ public class HotelRestController {
      */
     @GetMapping("/public")
     public ResponseEntity<List<HotelDTO>> getPublicHotels() {
-        return ResponseEntity.ok(hotelService.getAllHotelsDTO());
+        try {
+            List<HotelDTO> hotels = hotelService.getAllHotelsDTO();
+            // Toujours retourner une liste, même si vide
+            if (hotels == null) {
+                hotels = List.of();
+            }
+            return ResponseEntity.ok(hotels);
+        } catch (Exception e) {
+            // Log l'erreur pour le débogage
+            log.error("Error in getPublicHotels", e);
+            // Retourner une liste vide au lieu d'une erreur 500 pour éviter de casser le
+            // frontend
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(List.of());
+        }
     }
 
     /**

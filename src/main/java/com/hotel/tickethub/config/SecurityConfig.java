@@ -18,103 +18,128 @@ import com.hotel.tickethub.security.JwtTokenProvider;
 import com.hotel.tickethub.security.CustomUserDetailsService;
 
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
-    private final RateLimitFilter rateLimitFilter;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final CustomUserDetailsService userDetailsService;
+        private final RateLimitFilter rateLimitFilter;
+        private final JwtTokenProvider jwtTokenProvider;
+        private final CustomUserDetailsService userDetailsService;
 
-    public SecurityConfig(RateLimitFilter rateLimitFilter,
-            JwtTokenProvider jwtTokenProvider,
-            CustomUserDetailsService userDetailsService) {
-        this.rateLimitFilter = rateLimitFilter;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.userDetailsService = userDetailsService;
-    }
+        @Value("${cors.allowed-origins:}")
+        private String corsAllowedOrigins;
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // Create JWT filter
-        JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(
-                jwtTokenProvider,
-                userDetailsService);
+        public SecurityConfig(RateLimitFilter rateLimitFilter,
+                        JwtTokenProvider jwtTokenProvider,
+                        CustomUserDetailsService userDetailsService) {
+                this.rateLimitFilter = rateLimitFilter;
+                this.jwtTokenProvider = jwtTokenProvider;
+                this.userDetailsService = userDetailsService;
+        }
 
-        http
-                // Disable CSRF for REST API
-                .csrf(csrf -> csrf.disable())
+        @Bean
+        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+                // Create JWT filter
+                JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(
+                                jwtTokenProvider,
+                                userDetailsService);
 
-                // CORS configuration
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                http
+                                // Disable CSRF for REST API
+                                .csrf(csrf -> csrf.disable())
 
-                // Security headers
-                .headers(headers -> headers
-                        .frameOptions(frameOptions -> frameOptions.deny())
-                        .contentTypeOptions(contentTypeOptions -> {
-                        })
-                        .httpStrictTransportSecurity(hsts -> hsts
-                                .maxAgeInSeconds(31536000)))
+                                // CORS configuration
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // Add rate limiting filter
-                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                                // Security headers
+                                .headers(headers -> headers
+                                                // Note: FrameOptionsConfig::deny n'est pas disponible dans cette version de Spring Security
+                                                .frameOptions(frameOptions -> frameOptions.deny())
+                                                .contentTypeOptions(contentTypeOptions -> {
+                                                })
+                                                .httpStrictTransportSecurity(hsts -> hsts
+                                                                .maxAgeInSeconds(31536000)))
 
-                // Add JWT filter before default authentication filter
-                // Filter will authenticate if token present, but won't block if absent
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                                // Add rate limiting filter
+                                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
 
-                // Allow all requests (JWT filter handles auth if token present)
-                // @PreAuthorize in controllers will do the real verification
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                                // Add JWT filter before default authentication filter
+                                // Filter will authenticate if token present, but won't block if absent
+                                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
-        return http.build();
-    }
+                                // Allow all requests (JWT filter handles auth if token present)
+                                // @PreAuthorize in controllers will do the real verification
+                                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
-    // CORS configuration for frontend requests
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+                return http.build();
+        }
 
-        // Allowed frontend origins
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://localhost:8080",
-                "http://localhost:8081",
-                "http://192.168.58.1:5173",
-                "http://13.50.221.51"));
+        // CORS configuration for frontend requests
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
 
-        // Allowed HTTP methods
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                // Build allowed origins list
+                List<String> allowedOrigins = new ArrayList<>(Arrays.asList(
+                                "http://localhost:5173",
+                                "http://localhost:3000",
+                                "http://localhost:8080",
+                                "http://localhost:8081",
+                                "http://192.168.58.1:5173",
+                                // Frontend staging URLs (with common ports)
+                                "http://13.50.221.51",
+                                "http://13.50.221.51:80",
+                                "http://13.50.221.51:8080",
+                                "https://13.50.221.51",
+                                "https://13.50.221.51:443"));
 
-        // Allowed headers only
-        configuration.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "X-User-Email", // Only for dev-token in development
-                "X-Requested-With",
-                "Accept",
-                "Origin"));
+                // Add origins from environment variable if provided
+                if (corsAllowedOrigins != null && !corsAllowedOrigins.trim().isEmpty()) {
+                        String[] origins = corsAllowedOrigins.split(",");
+                        for (String origin : origins) {
+                                String trimmed = origin.trim();
+                                if (!trimmed.isEmpty() && !allowedOrigins.contains(trimmed)) {
+                                        allowedOrigins.add(trimmed);
+                                }
+                        }
+                }
 
-        // Allow credentials (cookies, auth headers)
-        configuration.setAllowCredentials(true);
+                configuration.setAllowedOrigins(allowedOrigins);
 
-        // Exposed headers in response
-        configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type", "X-User-Email"));
+                // Allowed HTTP methods
+                configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        // Preflight request cache duration (1 hour)
-        configuration.setMaxAge(3600L);
+                // Allowed headers only
+                configuration.setAllowedHeaders(Arrays.asList(
+                                "Authorization",
+                                "Content-Type",
+                                "X-User-Email", // Only for dev-token in development
+                                "X-Requested-With",
+                                "Accept",
+                                "Origin"));
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+                // Allow credentials (cookies, auth headers)
+                configuration.setAllowCredentials(true);
 
-        return source;
-    }
+                // Exposed headers in response
+                configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type", "X-User-Email"));
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+                // Preflight request cache duration (1 hour)
+                configuration.setMaxAge(3600L);
+
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
+
+                return source;
+        }
+
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 }

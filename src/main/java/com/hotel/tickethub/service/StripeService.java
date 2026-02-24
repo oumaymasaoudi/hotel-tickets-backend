@@ -1,5 +1,7 @@
 package com.hotel.tickethub.service;
 
+import com.hotel.tickethub.exception.ConfigurationException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.Plan;
 import com.hotel.tickethub.repository.PlanRepository;
 import com.stripe.Stripe;
@@ -38,15 +40,15 @@ public class StripeService {
         if (stripeSecretKey == null || stripeSecretKey.isEmpty() || 
             stripeSecretKey.equals("sk_test_your_secret_key_here") || 
             stripeSecretKey.equals("sk_test_51QEXAMPLE")) {
-            throw new RuntimeException("Clé API Stripe non configurée. Veuillez configurer stripe.secret.key dans application.properties");
+            throw new ConfigurationException("Clé API Stripe non configurée. Veuillez configurer stripe.secret.key dans application.properties");
         }
 
-        // Initialiser Stripe avec la clé secrète
-        Stripe.apiKey = stripeSecretKey;
+        // Initialiser Stripe avec la clé secrète (thread-safe)
+        initializeStripe();
 
         // Récupérer le plan
         Plan plan = planRepository.findById(planId)
-                .orElseThrow(() -> new RuntimeException("Plan non trouvé avec l'ID: " + planId + ". Vérifiez que le plan existe dans la base de données."));
+                .orElseThrow(() -> new ResourceNotFoundException("Plan non trouvé avec l'ID: " + planId + ". Vérifiez que le plan existe dans la base de données."));
 
         // Créer la session Stripe Checkout
         SessionCreateParams params = SessionCreateParams.builder()
@@ -93,8 +95,19 @@ public class StripeService {
      * Récupérer les détails d'une session Stripe
      */
     public Session getSession(String sessionId) throws StripeException {
-        Stripe.apiKey = stripeSecretKey;
+        initializeStripe();
         return Session.retrieve(sessionId);
+    }
+
+    /**
+     * Initialiser Stripe de manière thread-safe
+     */
+    private void initializeStripe() {
+        synchronized (StripeService.class) {
+            if (!stripeSecretKey.equals(Stripe.apiKey)) {
+                Stripe.apiKey = stripeSecretKey;
+            }
+        }
     }
 }
 

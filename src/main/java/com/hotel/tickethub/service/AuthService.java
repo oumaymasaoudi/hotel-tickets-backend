@@ -3,6 +3,9 @@ package com.hotel.tickethub.service;
 import com.hotel.tickethub.dto.AuthResponse;
 import com.hotel.tickethub.dto.LoginRequest;
 import com.hotel.tickethub.dto.RegisterRequest;
+import com.hotel.tickethub.exception.BusinessException;
+import com.hotel.tickethub.exception.ConflictException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.User;
 import com.hotel.tickethub.model.UserRole;
@@ -26,6 +29,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String DEV_TOKEN = "dev-token";
+
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final HotelRepository hotelRepository;
@@ -34,13 +39,13 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         // Security: Block SUPERADMIN creation via public interface
-        if (request.getRole() != null && request.getRole().toUpperCase().equals("SUPERADMIN")) {
-            throw new RuntimeException(
+        if (request.getRole() != null && "SUPERADMIN".equalsIgnoreCase(request.getRole())) {
+            throw new BusinessException(
                     "SuperAdmin role cannot be created via registration interface. Contact the developer.");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new ConflictException("Email already exists");
         }
 
         User user = new User();
@@ -56,27 +61,38 @@ public class AuthService {
         }
 
         // Business rule: Admin and Technician must be linked to a hotel
-        // Rule: "Un utilisateur (technicien ou admin) est rattaché à un hôtel via son
-        // HotelID"
-        if (request.getRole() != null &&
-                (request.getRole().toUpperCase().equals("ADMIN") ||
-                        request.getRole().toUpperCase().equals("TECHNICIAN"))) {
-            if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
-                throw new IllegalArgumentException("An ADMIN or TECHNICIAN must be linked to a hotel");
-            }
-            Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Hotel not found"));
-            user.setHotel(hotel);
-        } else if (request.getHotelId() != null && !request.getHotelId().isEmpty()) {
-            // For other roles (CLIENT), hotel is optional
-            Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Hotel not found"));
-            user.setHotel(hotel);
-        }
+        assignHotelToUser(request, user);
 
         user = userRepository.save(user);
 
         // Create user role
+        UserRole userRole = createUserRole(request, user);
+        userRoleRepository.save(userRole);
+
+        // Generate token
+        return buildAuthResponse(user, userRole);
+    }
+
+    private void assignHotelToUser(RegisterRequest request, User user) {
+        // Rule: "Un utilisateur (technicien ou admin) est rattaché à un hôtel via son HotelID"
+        if (request.getRole() != null &&
+                ("ADMIN".equalsIgnoreCase(request.getRole()) ||
+                        "TECHNICIAN".equalsIgnoreCase(request.getRole()))) {
+            if (request.getHotelId() == null || request.getHotelId().isEmpty()) {
+                throw new IllegalArgumentException("An ADMIN or TECHNICIAN must be linked to a hotel");
+            }
+            Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Hotel not found"));
+            user.setHotel(hotel);
+        } else if (request.getHotelId() != null && !request.getHotelId().isEmpty()) {
+            // For other roles (CLIENT), hotel is optional
+            Hotel hotel = hotelRepository.findById(UUID.fromString(request.getHotelId()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Hotel not found"));
+            user.setHotel(hotel);
+        }
+    }
+
+    private UserRole createUserRole(RegisterRequest request, User user) {
         UserRole userRole = new UserRole();
         userRole.setUser(user);
         userRole.setRole(request.getRole() != null
@@ -86,10 +102,10 @@ public class AuthService {
         if (user.getHotel() != null) {
             userRole.setHotel(user.getHotel());
         }
+        return userRole;
+    }
 
-        userRoleRepository.save(userRole);
-
-        // Generate token
+    private AuthResponse buildAuthResponse(User user, UserRole userRole) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", userRole.getRole().name());
         claims.put("authorities", List.of("ROLE_" + userRole.getRole().name()));
@@ -99,7 +115,7 @@ public class AuthService {
 
         // Token generation disabled, returns a dummy token
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())
@@ -174,7 +190,7 @@ public class AuthService {
 
         // Token generation disabled, returns a dummy token
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())
@@ -186,13 +202,13 @@ public class AuthService {
     @Transactional
     public void updateUserRole(String email, String roleName) {
         // Security: Block promotion to SUPERADMIN via this endpoint
-        if (roleName != null && roleName.toUpperCase().equals("SUPERADMIN")) {
-            throw new RuntimeException(
+        if (roleName != null && "SUPERADMIN".equalsIgnoreCase(roleName)) {
+            throw new BusinessException(
                     "SuperAdmin role cannot be assigned via this endpoint. Use SQL script or dedicated endpoint.");
         }
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         UserRole userRole = userRoleRepository.findByUserId(user.getId())
                 .orElse(new UserRole());
@@ -218,11 +234,11 @@ public class AuthService {
                 .anyMatch(ur -> ur.getRole() == com.hotel.tickethub.model.enums.UserRole.SUPERADMIN);
 
         if (superAdminExists) {
-            throw new RuntimeException("A SuperAdmin already exists. There can only be one SuperAdmin.");
+            throw new ConflictException("A SuperAdmin already exists. There can only be one SuperAdmin.");
         }
 
         if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException("A user with this email already exists");
+            throw new ConflictException("A user with this email already exists");
         }
 
         User user = new User();
@@ -241,7 +257,7 @@ public class AuthService {
         userRoleRepository.save(userRole);
 
         return AuthResponse.builder()
-                .token("dev-token")
+                .token(DEV_TOKEN)
                 .email(user.getEmail())
                 .userId(user.getId().toString())
                 .fullName(user.getFullName())

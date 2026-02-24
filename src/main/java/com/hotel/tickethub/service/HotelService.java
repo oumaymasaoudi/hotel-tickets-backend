@@ -2,8 +2,10 @@ package com.hotel.tickethub.service;
 
 import com.hotel.tickethub.dto.HotelDTO;
 import com.hotel.tickethub.dto.HotelRequest;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.Plan;
+import com.hotel.tickethub.model.enums.SubscriptionPlan;
 import com.hotel.tickethub.repository.HotelRepository;
 import com.hotel.tickethub.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +30,33 @@ public class HotelService {
     }
 
     public List<HotelDTO> getAllHotelsDTO() {
-        return hotelRepository.findAll().stream()
-                .map(this::convertToDTO)
-                .toList();
+        try {
+            List<Hotel> hotels = hotelRepository.findAll();
+            log.debug("Found {} hotels in database", hotels.size());
+
+            if (hotels == null || hotels.isEmpty()) {
+                log.info("No hotels found in database");
+                return List.of(); // Retourner une liste vide au lieu de null
+            }
+
+            return hotels.stream()
+                    .filter(java.util.Objects::nonNull) // Filtrer les hôtels null
+                    .map(hotel -> {
+                        try {
+                            return convertToDTO(hotel);
+                        } catch (Exception e) {
+                            log.warn("Error converting hotel to DTO: hotelId={}, error={}",
+                                    hotel != null ? hotel.getId() : "null", e.getMessage());
+                            return null; // Retourner null pour cet hôtel, sera filtré ensuite
+                        }
+                    })
+                    .filter(java.util.Objects::nonNull) // Filtrer les DTOs null en cas d'erreur
+                    .toList();
+        } catch (Exception e) {
+            log.error("Error in getAllHotelsDTO: {}", e.getMessage(), e);
+            // Retourner une liste vide au lieu de lancer une exception
+            return List.of();
+        }
     }
 
     public Optional<Hotel> getHotelById(UUID id) {
@@ -56,7 +82,7 @@ public class HotelService {
         hotel.setIsActive(true);
 
         Plan plan = planRepository.findById(request.getPlanId())
-                .orElseThrow(() -> new RuntimeException("Plan not found with ID: " + request.getPlanId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Plan not found with ID: " + request.getPlanId()));
         hotel.setPlan(plan);
 
         Hotel savedHotel = hotelRepository.save(hotel);
@@ -73,7 +99,7 @@ public class HotelService {
 
             if (request.getPlanId() != null) {
                 Plan plan = planRepository.findById(request.getPlanId())
-                        .orElseThrow(() -> new RuntimeException("Plan not found"));
+                        .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
                 hotel.setPlan(plan);
             }
 
@@ -86,17 +112,46 @@ public class HotelService {
     }
 
     public HotelDTO convertToDTO(Hotel hotel) {
-        HotelDTO dto = new HotelDTO();
-        dto.setId(hotel.getId());
-        dto.setName(hotel.getName());
-        dto.setAddress(hotel.getAddress());
-        dto.setEmail(hotel.getEmail());
-        dto.setPhone(hotel.getPhone());
-        dto.setPlanId(hotel.getPlan() != null ? hotel.getPlan().getId() : null);
-        if (hotel.getPlan() != null && hotel.getPlan().getName() != null) {
-            dto.setPlanName(hotel.getPlan().getName().name());
+        if (hotel == null) {
+            log.warn("convertToDTO called with null hotel");
+            return null;
         }
-        dto.setIsActive(hotel.getIsActive());
-        return dto;
+        try {
+            HotelDTO dto = new HotelDTO();
+            dto.setId(hotel.getId());
+            dto.setName(hotel.getName() != null ? hotel.getName() : "");
+            dto.setAddress(hotel.getAddress());
+            dto.setEmail(hotel.getEmail());
+            dto.setPhone(hotel.getPhone());
+
+            // Gérer le plan de manière sécurisée
+            setPlanInfo(dto, hotel);
+
+            dto.setIsActive(hotel.getIsActive() == null || hotel.getIsActive());
+            return dto;
+        } catch (Exception e) {
+            log.error("Error converting hotel to DTO: hotelId={}, error={}",
+                    hotel.getId() != null ? hotel.getId().toString() : "null", e.getMessage(), e);
+            // Retourner null au lieu de lancer une exception pour éviter de bloquer toute
+            // la liste
+            return null;
+        }
+    }
+
+    private void setPlanInfo(HotelDTO dto, Hotel hotel) {
+        if (hotel.getPlan() != null) {
+            dto.setPlanId(hotel.getPlan().getId());
+            try {
+                // Utiliser getNameSafe() pour éviter les erreurs avec les plans invalides
+                SubscriptionPlan planName = hotel.getPlan().getNameSafe();
+                dto.setPlanName(planName != null ? planName.name() : null);
+            } catch (Exception e) {
+                log.warn("Error getting plan name for hotel {}: {}", hotel.getId(), e.getMessage());
+                dto.setPlanName("STARTER"); // Valeur par défaut
+            }
+        } else {
+            dto.setPlanId(null);
+            dto.setPlanName(null);
+        }
     }
 }

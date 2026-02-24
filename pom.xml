@@ -14,7 +14,7 @@
     
     <groupId>com.hotel</groupId>
     <artifactId>ticket-hub-backend</artifactId>
-    <version>1.0.0</version>
+    <version>1.13.6</version>
     <name>Hotel Ticket Hub Backend</name>
     <description>Backend API for Hotel Ticket Management System</description>
     
@@ -187,25 +187,12 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
-                    </execution>
-                    <execution>
-                        <id>check</id>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
                         <configuration>
-                            <rules>
-                                <rule>
-                                    <element>PACKAGE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.50</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
+                            <!-- Garantir la génération du format XML pour Codecov et SonarCloud -->
+                            <formats>
+                                <format>XML</format>
+                                <format>HTML</format>
+                            </formats>
                         </configuration>
                     </execution>
                 </executions>

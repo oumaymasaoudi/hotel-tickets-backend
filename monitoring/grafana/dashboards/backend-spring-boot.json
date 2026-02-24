@@ -14,7 +14,7 @@
     },
     "editable": true,
     "gnetId": null,
-    "graphTooltip": 0,
+    "graphTooltip": 1,
     "id": null,
     "links": [],
     "panels": [
@@ -78,7 +78,7 @@
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "up{job=\"staging-backend\"}",
+                    "expr": "up{job=\"staging-backend\"} or vector(0)",
                     "refId": "A"
                 }
             ],
@@ -93,27 +93,28 @@
                         "mode": "palette-classic"
                     },
                     "custom": {
-                        "axisLabel": "",
+                        "axisLabel": "Requests per second",
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 30,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
                         },
                         "showPoints": "never",
-                        "spanNulls": true
+                        "spanNulls": true,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -125,7 +126,84 @@
                         ]
                     },
                     "unit": "reqps"
-                }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/200/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "green",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/401/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "yellow",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/403/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "orange",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/404/"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "blue",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byRegexp",
+                            "options": "/5../"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "red",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
             },
             "gridPos": {
                 "h": 8,
@@ -136,23 +214,59 @@
             "id": 2,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
-                    "placement": "bottom"
+                    "calcs": [
+                        "last",
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "showLegend": true
                 },
                 "tooltip": {
-                    "mode": "single"
+                    "mode": "multi",
+                    "sort": "desc"
                 }
             },
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\"}[5m])) by (status)",
-                    "legendFormat": "{{status}}",
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"200\"}[1m])) or vector(0)",
+                    "legendFormat": "200 OK",
                     "refId": "A"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"401\"}[1m])) or vector(0)",
+                    "legendFormat": "401 Unauthorized",
+                    "refId": "B"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"403\"}[1m])) or vector(0)",
+                    "legendFormat": "403 Forbidden",
+                    "refId": "C"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"404\"}[1m])) or vector(0)",
+                    "legendFormat": "404 Not Found",
+                    "refId": "D"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=\"500\"}[1m])) or vector(0)",
+                    "legendFormat": "500 Internal Server Error",
+                    "refId": "E"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=~\"5..\",status!=\"500\"}[1m])) or vector(0)",
+                    "legendFormat": "5xx Other Errors",
+                    "refId": "F"
+                },
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\",status=~\"4..\",status!~\"401|403|404\"}[1m])) or vector(0)",
+                    "legendFormat": "4xx Other Client Errors",
+                    "refId": "G"
                 }
             ],
-            "title": "HTTP Requests Rate",
+            "title": "HTTP Status Codes - Temps Réel",
             "type": "timeseries"
         },
         {
@@ -167,15 +281,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -183,7 +292,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -206,25 +314,33 @@
             "id": 3,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
-                    "mode": "single"
+                    "mode": "multi"
                 }
             },
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "jvm_memory_used_bytes{job=\"staging-backend\",area=\"heap\"}",
+                    "expr": "jvm_memory_used_bytes{job=\"staging-backend\",area=\"heap\"} or vector(0)",
                     "legendFormat": "Used",
                     "refId": "A"
                 },
                 {
-                    "expr": "jvm_memory_max_bytes{job=\"staging-backend\",area=\"heap\"}",
+                    "expr": "jvm_memory_max_bytes{job=\"staging-backend\",area=\"heap\"} or vector(0)",
                     "legendFormat": "Max",
                     "refId": "B"
+                },
+                {
+                    "expr": "jvm_memory_committed_bytes{job=\"staging-backend\",area=\"heap\"} or vector(0)",
+                    "legendFormat": "Committed",
+                    "refId": "C"
                 }
             ],
             "title": "JVM Heap Memory",
@@ -280,17 +396,17 @@
                     "fields": "",
                     "values": false
                 },
-                "showThresholdLabels": false,
+                "showThresholdLabels": true,
                 "showThresholdMarkers": true
             },
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "avg((jvm_memory_used_bytes{job=\"staging-backend\",area=\"heap\"} / jvm_memory_max_bytes{job=\"staging-backend\",area=\"heap\"}) * 100)",
+                    "expr": "(avg(jvm_memory_used_bytes{job=\"staging-backend\",area=\"heap\"}) / avg(jvm_memory_max_bytes{job=\"staging-backend\",area=\"heap\"})) * 100 or vector(0)",
                     "refId": "A"
                 }
             ],
-            "title": "JVM Memory Usage %",
+            "title": "JVM Heap Usage %",
             "type": "gauge"
         },
         {
@@ -305,15 +421,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -321,7 +432,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -329,10 +439,18 @@
                             {
                                 "color": "green",
                                 "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 500
+                            },
+                            {
+                                "color": "red",
+                                "value": 2000
                             }
                         ]
                     },
-                    "unit": "s"
+                    "unit": "ms"
                 }
             },
             "gridPos": {
@@ -344,8 +462,12 @@
             "id": 5,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "p95",
+                        "max"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
@@ -355,12 +477,22 @@
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"staging-backend\"}[5m])) by (le, uri))",
-                    "legendFormat": "{{uri}}",
+                    "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"staging-backend\"}[5m])) by (le, uri)) * 1000 or vector(0)",
+                    "legendFormat": "{{uri}} (p50)",
                     "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"staging-backend\"}[5m])) by (le, uri)) * 1000 or vector(0)",
+                    "legendFormat": "{{uri}} (p95)",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"staging-backend\"}[5m])) by (le, uri)) * 1000 or vector(0)",
+                    "legendFormat": "{{uri}} (p99)",
+                    "refId": "C"
                 }
             ],
-            "title": "Response Time (95th percentile)",
+            "title": "HTTP Response Time (p50, p95, p99)",
             "type": "timeseries"
         },
         {
@@ -375,15 +507,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -391,7 +518,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -401,8 +527,16 @@
                                 "value": null
                             },
                             {
-                                "color": "red",
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "orange",
                                 "value": 5
+                            },
+                            {
+                                "color": "red",
+                                "value": 10
                             }
                         ]
                     },
@@ -418,12 +552,15 @@
             "id": 6,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
-                    "mode": "single"
+                    "mode": "multi"
                 }
             },
             "pluginVersion": "8.0.0",
@@ -434,7 +571,7 @@
                     "refId": "A"
                 }
             ],
-            "title": "Error Rate %",
+            "title": "HTTP Error Rate %",
             "type": "timeseries"
         },
         {
@@ -449,15 +586,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -465,7 +597,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -488,25 +619,33 @@
             "id": 7,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
-                    "mode": "single"
+                    "mode": "multi"
                 }
             },
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "jvm_threads_live_threads{job=\"staging-backend\"}",
+                    "expr": "jvm_threads_live_threads{job=\"staging-backend\"} or vector(0)",
                     "legendFormat": "Live Threads",
                     "refId": "A"
                 },
                 {
-                    "expr": "jvm_threads_peak_threads{job=\"staging-backend\"}",
+                    "expr": "jvm_threads_peak_threads{job=\"staging-backend\"} or vector(0)",
                     "legendFormat": "Peak Threads",
                     "refId": "B"
+                },
+                {
+                    "expr": "jvm_threads_daemon_threads{job=\"staging-backend\"} or vector(0)",
+                    "legendFormat": "Daemon Threads",
+                    "refId": "C"
                 }
             ],
             "title": "JVM Threads",
@@ -524,15 +663,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -540,7 +674,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -563,8 +696,12 @@
             "id": 8,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "max",
+                        "sum"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
@@ -574,7 +711,7 @@
             "pluginVersion": "8.0.0",
             "targets": [
                 {
-                    "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"staging-backend\"}[5m])) by (gc)",
+                    "expr": "rate(jvm_gc_pause_seconds_sum{job=\"staging-backend\"}[5m]) or vector(0)",
                     "legendFormat": "{{gc}}",
                     "refId": "A"
                 }
@@ -594,15 +731,10 @@
                         "axisPlacement": "auto",
                         "barAlignment": 0,
                         "drawStyle": "line",
-                        "fillOpacity": 10,
-                        "gradientMode": "none",
-                        "hideFrom": {
-                            "tooltip": false,
-                            "viz": false,
-                            "legend": false
-                        },
-                        "lineInterpolation": "linear",
-                        "lineWidth": 1,
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
                         "pointSize": 5,
                         "scaleDistribution": {
                             "type": "linear"
@@ -610,7 +742,6 @@
                         "showPoints": "never",
                         "spanNulls": true
                     },
-                    "nullValueMode": "null as zero",
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
@@ -633,8 +764,11 @@
             "id": 9,
             "options": {
                 "legend": {
-                    "calcs": [],
-                    "displayMode": "list",
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
                     "placement": "bottom"
                 },
                 "tooltip": {
@@ -657,22 +791,325 @@
                     "expr": "hikaricp_connections_idle{job=\"staging-backend\"} or vector(0)",
                     "legendFormat": "Idle",
                     "refId": "C"
+                },
+                {
+                    "expr": "hikaricp_connections_pending{job=\"staging-backend\"} or vector(0)",
+                    "legendFormat": "Pending",
+                    "refId": "D"
                 }
             ],
-            "title": "Database Connections",
+            "title": "Database Connections (HikariCP)",
             "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": true
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "bytes"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 32
+            },
+            "id": 10,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "jvm_memory_used_bytes{job=\"staging-backend\",id=\"Metaspace\"} or vector(0)",
+                    "legendFormat": "Metaspace Used",
+                    "refId": "A"
+                },
+                {
+                    "expr": "jvm_memory_max_bytes{job=\"staging-backend\",id=\"Metaspace\"} or vector(0)",
+                    "legendFormat": "Metaspace Max",
+                    "refId": "B"
+                },
+                {
+                    "expr": "jvm_memory_used_bytes{job=\"staging-backend\",id=\"Compressed-Class-Space\"} or vector(0)",
+                    "legendFormat": "Compressed Class Space Used",
+                    "refId": "C"
+                }
+            ],
+            "title": "JVM Memory (Metaspace)",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "gradientMode": "opacity",
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": true
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 32
+            },
+            "id": 11,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max",
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "rate(jvm_gc_pause_seconds_count{job=\"staging-backend\"}[5m]) or vector(0)",
+                    "legendFormat": "{{gc}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "GC Collections Rate",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "bars",
+                        "fillOpacity": 100,
+                        "gradientMode": "none",
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 40
+            },
+            "id": 12,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\"}[5m])) by (method, uri) or vector(0)",
+                    "legendFormat": "{{method}} {{uri}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "HTTP Requests by Method & Endpoint",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 40
+            },
+            "id": 13,
+            "options": {
+                "displayMode": "list",
+                "filter": {
+                    "value": ""
+                },
+                "showHeader": true
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"staging-backend\"}[5m])) by (status) or vector(0)",
+                    "format": "table",
+                    "instant": true,
+                    "legendFormat": "{{status}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "HTTP Status Summary",
+            "transformations": [
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true
+                        },
+                        "indexByName": {},
+                        "renameByName": {
+                            "Value": "Requests/sec",
+                            "status": "Status Code"
+                        }
+                    }
+                }
+            ],
+            "type": "table"
         }
     ],
     "refresh": "30s",
-    "schemaVersion": 27,
+    "schemaVersion": 38,
     "style": "dark",
     "tags": [
         "spring-boot",
         "backend",
-        "staging"
+        "staging",
+        "hotel-ticket-hub"
     ],
     "templating": {
-        "list": []
+        "list": [
+            {
+                "current": {
+                    "selected": false,
+                    "text": "staging-backend",
+                    "value": "staging-backend"
+                },
+                "hide": 0,
+                "label": "Job",
+                "name": "job",
+                "options": [
+                    {
+                        "selected": true,
+                        "text": "staging-backend",
+                        "value": "staging-backend"
+                    }
+                ],
+                "query": {
+                    "query": "staging-backend",
+                    "refId": "StandardVariableQuery"
+                },
+                "skipUrlSync": false,
+                "type": "textbox"
+            }
+        ]
     },
     "time": {
         "from": "now-1h",
@@ -694,5 +1131,5 @@
     "timezone": "browser",
     "title": "Hotel Ticket Hub - Backend Spring Boot",
     "uid": "backend-spring-boot",
-    "version": 1
+    "version": 2
 }
