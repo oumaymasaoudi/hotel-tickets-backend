@@ -124,9 +124,8 @@ class TicketControllerTest {
                 MockMultipartFile mockFile = new MockMultipartFile(
                                 "images", "test.jpg", "image/jpeg", "content".getBytes());
 
-                assertThrows(RuntimeException.class, () -> 
-                        ticketController.createTicket(createRequest, List.of(mockFile))
-                );
+                assertThrows(RuntimeException.class,
+                                () -> ticketController.createTicket(createRequest, List.of(mockFile)));
 
                 verify(ticketService, times(1)).createTicket(any(CreateTicketRequest.class), anyList());
         }

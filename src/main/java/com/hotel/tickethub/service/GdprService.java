@@ -49,7 +49,7 @@ public class GdprService {
      */
     public GdprConsent recordConsent(UUID userId, String consentType, Boolean consented, String ipAddress, String userAgent) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(USER_NOT_FOUND_MESSAGE));
 
         GdprConsent existingConsent = consentRepository
                 .findByUserIdAndConsentType(userId, consentType)
@@ -114,7 +114,7 @@ public class GdprService {
      */
     public Map<String, Object> exportUserData(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(USER_NOT_FOUND_MESSAGE));
 
         Map<String, Object> data = new HashMap<>();
         
@@ -215,7 +215,7 @@ public class GdprService {
      */
     public DataDeletionRequest requestDataDeletion(UUID userId, String ipAddress) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(USER_NOT_FOUND_MESSAGE));
 
         // Vérifier s'il existe déjà une demande en cours
         List<DataDeletionRequest> pendingRequests = deletionRequestRepository
@@ -268,7 +268,7 @@ public class GdprService {
 
         User user = request.getUser();
         User processedBy = userRepository.findById(processedByUserId)
-                .orElseThrow(() -> new RuntimeException("Processing user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Processing user not found"));
 
         request.setStatus(DataDeletionRequest.DeletionStatus.PROCESSING);
         request.setProcessedBy(processedBy);

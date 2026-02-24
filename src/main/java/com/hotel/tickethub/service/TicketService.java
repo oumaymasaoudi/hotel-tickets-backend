@@ -44,10 +44,10 @@ public class TicketService {
     @Transactional
     public TicketResponse createTicket(CreateTicketRequest request, List<MultipartFile> images) {
         Hotel hotel = hotelRepository.findById(request.getHotelId())
-                .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + request.getHotelId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Hotel not found with ID: " + request.getHotelId()));
 
         Category category = categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found with ID: " + request.getCategoryId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found with ID: " + request.getCategoryId()));
 
         // Vérifier que l'hôtel a un plan
         if (hotel.getPlan() == null) {
@@ -86,13 +86,13 @@ public class TicketService {
 
     public TicketResponse getTicketByNumber(String ticketNumber) {
         Ticket ticket = ticketRepository.findByTicketNumber(ticketNumber)
-                .orElseThrow(() -> new RuntimeException(TICKET_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(TICKET_NOT_FOUND_MESSAGE));
         return convertToResponse(ticket);
     }
 
     public TicketResponse getTicketById(UUID ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException(TICKET_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(TICKET_NOT_FOUND_MESSAGE));
         return convertToResponse(ticket);
     }
 
@@ -240,7 +240,7 @@ public class TicketService {
     @Transactional
     public TicketResponse addImagesToTicket(UUID ticketId, List<MultipartFile> images) {
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException(TICKET_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(TICKET_NOT_FOUND_MESSAGE));
 
         if (images != null && !images.isEmpty()) {
             for (MultipartFile image : images) {
@@ -254,10 +254,10 @@ public class TicketService {
     @Transactional
     public void deleteTicketImage(UUID ticketId, UUID imageId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException(TICKET_NOT_FOUND_MESSAGE));
+                .orElseThrow(() -> new ResourceNotFoundException(TICKET_NOT_FOUND_MESSAGE));
 
         TicketImage image = ticketImageRepository.findById(imageId)
-                .orElseThrow(() -> new RuntimeException("Image not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Image not found"));
 
         // Verify the image belongs to the ticket
         if (!image.getTicket().getId().equals(ticketId)) {

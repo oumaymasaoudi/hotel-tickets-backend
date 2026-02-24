@@ -2,6 +2,7 @@ package com.hotel.tickethub.service;
 
 import com.hotel.tickethub.dto.HotelDTO;
 import com.hotel.tickethub.dto.HotelRequest;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.Plan;
 import com.hotel.tickethub.model.enums.SubscriptionPlan;
@@ -81,7 +82,7 @@ public class HotelService {
         hotel.setIsActive(true);
 
         Plan plan = planRepository.findById(request.getPlanId())
-                .orElseThrow(() -> new RuntimeException("Plan not found with ID: " + request.getPlanId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Plan not found with ID: " + request.getPlanId()));
         hotel.setPlan(plan);
 
         Hotel savedHotel = hotelRepository.save(hotel);
@@ -98,7 +99,7 @@ public class HotelService {
 
             if (request.getPlanId() != null) {
                 Plan plan = planRepository.findById(request.getPlanId())
-                        .orElseThrow(() -> new RuntimeException("Plan not found"));
+                        .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
                 hotel.setPlan(plan);
             }
 
