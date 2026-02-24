@@ -16,7 +16,7 @@ name: Backend CI/CD Pipeline
 # 5. ✅ Nettoyage Docker sécurisé (préserve volumes Grafana/Prometheus)
 # 6. ✅ Build accéléré par cache Maven (chaque job = VM séparée, pas de réutilisation directe)
 # 7. ✅ Staging uniquement sur develop, main pour release
-# 8. ✅ OWASP Dependency Check Action @main (temporaire, Dependabot découvrira la version taguée) et Trivy @0.28.0
+# 8. ⚠️ OWASP Dependency Check Action @main (RISQUE - à pinner sur tag dès disponible) et Trivy @0.28.0
 # 9. ✅ OWASP et security-lint bloquants sur main
 
 on:
@@ -60,7 +60,7 @@ on:
 permissions:
   actions: read
   contents: read
-  security-events: write
+  # ⭐ Security-events: write uniquement sur jobs qui upload SARIF (principe du moindre privilège)
 
 # ⭐ AMÉLIORATION CRITIQUE: Variables pour déterminer la branche (gère PR correctement)
 # En PR: github.ref = refs/pull/123/merge, donc on utilise github.base_ref (branche cible)
@@ -70,6 +70,9 @@ env:
   JAVA_VERSION: '17'
   MAVEN_OPTS: '-Xmx2048m -XX:+UseG1GC'
   REGISTRY: ghcr.io
+  # ⭐ Format image: ghcr.io/<owner>/<repo>/backend:tag
+  # Alternative possible: ghcr.io/<owner>/backend ou ghcr.io/<owner>/<repo>-backend
+  # Vérifier que ce format correspond à votre configuration GHCR et docker-compose.yml
   IMAGE_NAME: ${{ github.repository }}/backend
   MONITORING_DIR: /opt/monitoring
 
@@ -96,11 +99,11 @@ jobs:
       # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop (gère PR correctement)
       - name: Run Maven Checkstyle
         run: mvn -B checkstyle:check
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
       
       - name: Run Maven SpotBugs
         run: mvn -B spotbugs:spotbugs -Duser.language=en -Duser.country=US
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
         env:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
       
@@ -196,8 +199,35 @@ jobs:
           name: jacoco-report
           path: target/site/jacoco
       
+      # ⭐ Compute branch context (réutilisable dans tous les scripts)
+      - name: Compute branch context
+        id: branch-context
+        run: |
+          # Déterminer si on est sur main ou develop (gère PR correctement)
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            IS_MAIN="${{ github.base_ref == 'main' }}"
+            IS_DEVELOP="${{ github.base_ref == 'develop' }}"
+            BRANCH_NAME="${{ github.base_ref }}"
+          else
+            IS_MAIN="${{ github.ref_name == 'main' }}"
+            IS_DEVELOP="${{ github.ref_name == 'develop' }}"
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          
+          echo "IS_MAIN=${IS_MAIN}" >> $GITHUB_ENV
+          echo "IS_DEVELOP=${IS_DEVELOP}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+          
+          echo "Branch context computed:"
+          echo "  - IS_MAIN: ${IS_MAIN}"
+          echo "  - IS_DEVELOP: ${IS_DEVELOP}"
+          echo "  - BRANCH_NAME: ${BRANCH_NAME}"
+      
       - name: Check coverage threshold
         run: |
+          # ⭐ Initialiser COVERAGE_CHECK pour éviter les erreurs dans Job Summary
+          COVERAGE_CHECK=0
+          
           if [ ! -f "target/site/jacoco/jacoco.xml" ]; then
             echo "ERROR: jacoco.xml not found!"
             exit 1
@@ -207,6 +237,7 @@ jobs:
           # Vérifier le seuil de couverture réellement
           # Parse jacoco.xml pour extraire le coverage total (utilise Python3 disponible sur ubuntu-latest)
           # Fallback sur LINE si INSTRUCTION absent (robustesse selon versions JaCoCo)
+          # ⚠️ Note: Si projet devient multi-module, il faudra merger les jacoco.xml ou pointer sonar vers plusieurs chemins
           COVERAGE_DATA=$(python3 -c "import xml.etree.ElementTree as ET; import sys; tree = ET.parse('target/site/jacoco/jacoco.xml'); root = tree.getroot(); counter = root.find('.//counter[@type=\"INSTRUCTION\"]'); counter_type = 'INSTRUCTION' if counter is not None else None; counter = counter if counter is not None else root.find('.//counter[@type=\"LINE\"]'); counter_type = counter_type if counter_type else ('LINE' if counter is not None else 'ERROR'); missed = int(counter.get('missed', 0)) if counter is not None else 0; covered = int(counter.get('covered', 0)) if counter is not None else 0; total = missed + covered; coverage_pct = (covered / total * 100) if total > 0 else 0.0; print(f'{coverage_pct:.2f}|{missed}|{covered}|{total}|{counter_type}')" 2>/dev/null || echo "0.00|0|0|0|ERROR")
           
           COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-60.0}
@@ -227,15 +258,18 @@ jobs:
           echo "  - Coverage percentage: ${COVERAGE_NUM}%"
           echo "  - Threshold: ${COVERAGE_THRESHOLD}%"
           
-          # Déterminer si on est sur main (gère PR correctement)
-          IS_MAIN="${{ github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main' }}"
+          # Utiliser IS_MAIN depuis $GITHUB_ENV (calculé dans step précédent)
           
           # Vérifier que le counter existe et que les données sont valides
           if [ "$TOTAL" = "0" ] || [ -z "$COVERAGE_NUM" ] || [ "$COUNTER_TYPE" = "ERROR" ]; then
             echo "❌ ERROR: Could not parse coverage data from jacoco.xml"
             echo "   Counter types INSTRUCTION and LINE not found, or file format changed"
             echo "   This indicates a pipeline issue that needs investigation"
-            if [ "$IS_MAIN" = "true" ]; then
+            echo ""
+            echo "   Debug: Dumping first 10 <counter> elements from jacoco.xml for investigation:"
+            python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('target/site/jacoco/jacoco.xml'); root = tree.getroot(); counters = root.findall('.//counter'); [print(f'  - {c.get(\"type\")}: missed={c.get(\"missed\")}, covered={c.get(\"covered\")}') for c in counters[:10]]" 2>/dev/null || echo "   (Could not dump counters - XML parsing failed)"
+            COVERAGE_CHECK=0
+            if [ "$IS_MAIN" == "true" ]; then
               echo "   ❌ Failing on main branch (DevSecOps strict: cannot proceed without coverage data)"
               exit 1
             else
@@ -248,7 +282,7 @@ jobs:
               echo "✓ Coverage ${COVERAGE_NUM}% meets threshold ${COVERAGE_THRESHOLD}%"
             else
               echo "❌ Coverage ${COVERAGE_NUM}% is below threshold ${COVERAGE_THRESHOLD}%"
-              if [ "$IS_MAIN" = "true" ]; then
+              if [ "$IS_MAIN" == "true" ]; then
                 exit 1
               else
                 echo "⚠️  Warning only (not on main branch)"
@@ -256,10 +290,28 @@ jobs:
             fi
           fi
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # ⭐ Job Summary: Afficher le coverage dans le résumé GitHub
+          echo "## 📊 Code Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          if [ "$COVERAGE_CHECK" = "1" ]; then
+            echo "| Coverage | **${COVERAGE_NUM}%** | ${COVERAGE_THRESHOLD}% | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Coverage | **${COVERAGE_NUM}%** | ${COVERAGE_THRESHOLD}% | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📈 Coverage report: Download artifact \`jacoco-report\` to view the full JaCoCo HTML report" >> $GITHUB_STEP_SUMMARY
         env:
           COVERAGE_THRESHOLD: 60.0
         # continue-on-error géré par la logique interne du script (fail sur main, warn sur develop)
       
+      # ⭐ Codecov : upload conditionnel (token requis pour repos privés uniquement)
+      # Pour repos publics : Codecov fonctionne sans token (mais on peut quand même envoyer)
+      # Pour repos privés : token requis (CODECOV_TOKEN secret)
+      # Note: continue-on-error: true gère les cas où CODECOV_TOKEN n'existe pas (repos publics)
+      # Si le token n'existe pas, Codecov peut quand même fonctionner pour les repos publics
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
@@ -267,6 +319,8 @@ jobs:
           flags: backend
           name: backend-coverage
           fail_ci_if_error: false
+          # ⭐ Token conditionnel : pour repos privés uniquement (public repos n'en ont pas besoin)
+          # Si CODECOV_TOKEN n'existe pas, cette ligne sera vide et Codecov fonctionnera sans token (repos publics)
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
@@ -276,7 +330,9 @@ jobs:
   build:
     name: Backend - Build
     runs-on: ubuntu-latest
-    needs: [lint, test, coverage]
+    # ⭐ Optimisation : build dépend de lint + test seulement (coverage dépend déjà de test)
+    # docker-build dépend déjà de sécurité + sonar, donc le contrôle DevSecOps est maintenu
+    needs: [lint, test]
     timeout-minutes: 15
     
     steps:
@@ -338,7 +394,7 @@ jobs:
     needs: [lint, test, coverage]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
     # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail, permissif sur develop (gère PR correctement)
-    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+    continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
     
     steps:
       - name: Checkout code
@@ -374,14 +430,12 @@ jobs:
       # Compiler les classes principales ET les classes de test pour Sonar
       # SonarCloud a besoin de target/classes ET target/test-classes
       # Pas besoin d'exécuter les tests car jacoco.xml est déjà disponible
-      # Important: compiler d'abord les classes principales, puis les test classes
-      # Ne pas utiliser -Dmaven.test.skip=true car cela empêche la compilation des test classes
+      # ⭐ Simplification: test-compile compile déjà main + tests (via phases Maven)
+      # Plus rapide et évite la double compilation
       - name: Compile classes and test classes for Sonar
         run: |
-          # Compiler les classes principales
-          mvn -B compile -DskipTests=true -DskipITs
-          # Compiler les classes de test (sans -Dmaven.test.skip pour permettre la compilation)
-          mvn -B test-compile -DskipTests=true -DskipITs
+          # test-compile compile automatiquement les classes principales puis les classes de test
+          mvn -B test-compile -DskipITs
         env:
           MAVEN_OPTS: ${{ env.MAVEN_OPTS }}
       
@@ -435,13 +489,17 @@ jobs:
       - name: SonarCloud Analysis (Maven)
         id: sonarcloud-scan
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Starting SonarCloud Analysis..."
           echo "Organization: oumaymasaoudi"
           echo "Project Key: oumaymasaoudi_hotel-tickets-backend"
-          echo "Branch: ${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "PR: #${{ github.event.pull_request.number }} (${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }})"
+          else
+            echo "Branch: ${{ github.ref_name }}"
+          fi
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           
           # Vérifier que le token est disponible
@@ -456,14 +514,34 @@ jobs:
             exit 1
           fi
           
-          mvn -B sonar:sonar \
-            -DskipTests \
-            -Dsonar.organization=oumaymasaoudi \
-            -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.branch.name=${{ github.ref_name }} \
-            -Dsonar.branch.name=${{ github.ref_name }}
+          # ⭐ Utiliser les paramètres PR pour les Pull Requests (plus robuste que branch.name)
+          # En PR : SonarCloud attache l'analyse à la PR
+          # En push : SonarCloud analyse la branche
+          # ⚠️ Note: sonar.coverage.jacoco.xmlReportPaths est défini dans sonar-project.properties
+          # Si un jour tu vois "0% coverage", vérifier que le chemin est correct et qu'il n'y a pas de conflit
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            mvn -B sonar:sonar \
+              -DskipTests \
+              -Dsonar.organization=oumaymasaoudi \
+              -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend \
+              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
+              -Dsonar.pullrequest.branch=${{ github.event.pull_request.head.ref }} \
+              -Dsonar.pullrequest.base=${{ github.event.pull_request.base.ref }} \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.qualitygate.timeout=600
+          else
+            mvn -B sonar:sonar \
+              -DskipTests \
+              -Dsonar.organization=oumaymasaoudi \
+              -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend \
+              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.branch.name=${{ github.ref_name }} \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.qualitygate.timeout=600
+          fi
           
           SONAR_EXIT_CODE=$?
           if [ $SONAR_EXIT_CODE -ne 0 ]; then
@@ -491,11 +569,22 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Project Key: oumaymasaoudi_hotel-tickets-backend"
           echo "Organization: oumaymasaoudi"
-          echo "Branch: ${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "PR: #${{ github.event.pull_request.number }} (${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }})"
+          else
+            echo "Branch: ${{ github.ref_name }}"
+          fi
           echo "Commit: ${{ github.sha }}"
           echo ""
+          SONAR_URL="https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            SONAR_URL="${SONAR_URL}&pullRequest=${{ github.event.pull_request.number }}"
+          else
+            SONAR_URL="${SONAR_URL}&branch=${{ github.ref_name }}"
+          fi
+          
           echo "Check SonarCloud dashboard:"
-          echo "https://sonarcloud.io/project/overview?id=oumaymasaoudi_hotel-tickets-backend&branch=${{ github.ref_name }}"
+          echo "$SONAR_URL"
           echo ""
           if [ "${{ job.status }}" == "success" ]; then
             echo "Status: Analysis sent successfully to SonarCloud"
@@ -504,8 +593,33 @@ jobs:
             echo "Status: Analysis may have failed - check logs above"
             echo "Outcome: ${{ steps.sonarcloud-scan.outcome || 'skipped' }}"
           fi
+          
+          # ⭐ Job Summary: Afficher le lien SonarCloud dans le résumé GitHub
+          echo "## 🔍 SonarCloud Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ steps.sonarcloud-scan.outcome || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "| PR | #${{ github.event.pull_request.number }} (${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| Dashboard | [View on SonarCloud]($SONAR_URL) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
+      # ⭐ Job Summary pour PR fork : informer que Sonar est skip
+      - name: SonarCloud Skipped (Fork PR)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "## 🔍 SonarCloud Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Skipped**: SonarCloud analysis is not available for fork pull requests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Reason: \`SONAR_TOKEN\` secret is not available for security reasons." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To enable SonarCloud analysis, merge this PR into the main repository." >> $GITHUB_STEP_SUMMARY
 
   # ============================================
   # SECURITY SCAN
@@ -516,8 +630,10 @@ jobs:
     needs: [lint, test]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
     # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop (gère PR correctement)
-    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
-    
+    continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
+    permissions:
+      contents: read
+      security-events: write  # ⭐ Nécessaire pour upload SARIF
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -528,9 +644,14 @@ jobs:
       # Le path '.' scanne le repo entier, mais dependency-check détecte automatiquement pom.xml
       # et scanne uniquement les dépendances Maven (les exclusions évitent de scanner node_modules)
       - name: Run OWASP Dependency Check
-        # Note: Utilisation temporaire de @main jusqu'à ce que Dependabot découvre les versions taguées disponibles
-        # Dependabot proposera automatiquement une PR avec la bonne version taguée quand disponible
-        # Pour vérifier les versions disponibles: https://github.com/dependency-check/Dependency-Check_Action/releases
+        # ⚠️ RISQUE CRITIQUE: Utilisation de @main (temporaire) - RISQUE DE CASSURE DU PIPELINE
+        # Une modification sur main peut casser la CI du jour au lendemain (breaking changes sans prévenir)
+        # ⭐ ACTION REQUISE: Pinner dès que possible sur un tag release (@vX.Y.Z) ou un commit SHA stable
+        # Pour vérifier les versions taguées: https://github.com/dependency-check/Dependency-Check_Action/releases
+        # Pour trouver un commit SHA stable: https://github.com/dependency-check/Dependency-Check_Action/commits/main
+        # Dependabot proposera automatiquement une PR avec la version taguée quand disponible
+        # Exemple de version taguée: @v3.3.0 (à utiliser dès que disponible pour stabilité en production)
+        # Format pour commit SHA: uses: dependency-check/Dependency-Check_Action@<commit-sha>
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: 'hotel-ticket-hub-backend'
@@ -539,7 +660,7 @@ jobs:
           # Exclure node_modules et fichiers non-Java pour scanner uniquement les dépendances Maven
           # dependency-check détecte automatiquement pom.xml et scanne les dépendances Maven uniquement
           args: '--failOnCVSS=7 --enableRetired --enableExperimental --exclude "**/node_modules/**" --exclude "**/package*.json" --exclude "**/.git/**" --exclude "**/target/**"'
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
 
       # Debug: Lister les fichiers générés par dependency-check (robustesse)
       - name: Debug Dependency-Check outputs
@@ -600,7 +721,7 @@ jobs:
             echo "✓ SARIF file found: $SARIF"
           else
             echo "sarif_exists=false" >> $GITHUB_OUTPUT
-            echo "⚠️  SARIF file not found (this is normal if no vulnerabilities were found)"
+            echo "⚠️  SARIF file not found (peut arriver si l'action n'a pas généré le SARIF selon config/version)"
           fi
         continue-on-error: true
 
@@ -610,6 +731,35 @@ jobs:
         with:
           sarif_file: ${{ steps.check_sarif.outputs.sarif_file }}
         continue-on-error: true
+      
+      # ⭐ Job Summary pour OWASP Dependency Check
+      - name: OWASP Dependency Check Summary
+        if: always()
+        run: |
+          echo "## 🔍 OWASP Dependency Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          SCAN_OUTCOME="${{ job.status }}"
+          if [ "$SCAN_OUTCOME" == "success" ]; then
+            echo "| Status | ✅ **Scan OK** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | No CVSS >= 7 vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SCAN_OUTCOME" == "failure" ]; then
+            echo "| Status | ❌ **Scan Failed** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | CVSS >= 7 vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.ref_name }}" == "main" ]; then
+              echo "| Impact | 🚫 **Blocking** (main branch - release blocked) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Impact | ⚠️ **Warning** (develop branch - non-blocking) |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Status | ⏭️ **Skipped** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | Scan was skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check_sarif.outputs.sarif_exists }}" == "true" ]; then
+            echo "📊 View detailed results in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
 
   security-lint:
     name: Backend - Security Linting (Trivy)
@@ -617,8 +767,10 @@ jobs:
     needs: [lint, test]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
     # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop (gère PR correctement)
-    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
-    
+    continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
+    permissions:
+      contents: read
+      security-events: write  # ⭐ Nécessaire pour upload SARIF
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -640,14 +792,24 @@ jobs:
           trivy fs . --severity CRITICAL,HIGH --format table --scanners vuln --exit-code 0 || echo "⚠️  Trivy table scan completed with warnings"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+      # ⭐ Cache Trivy DB pour améliorer la fiabilité (évite rate-limits et téléchargements répétés)
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}
+
       # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
       # ⭐ AMÉLIORATION DevSecOps: exit-code conditionnel - bloquant sur main, permissif sur develop
-      # ⚠️  TEMPORAIRE: continue-on-error: true pour diagnostiquer les vulnérabilités trouvées
-      #     Une fois les vulnérabilités identifiées et corrigées, remettre continue-on-error conditionnel
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
         uses: aquasecurity/trivy-action@0.28.0
-        continue-on-error: true  # ⚠️  TEMPORAIRE: non-bloquant pour diagnostic
+        # ⭐ Bloquer sur main, permissif sur develop (gère PR correctement)
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
+        env:
+          TRIVY_CACHE_DIR: ~/.cache/trivy
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -658,7 +820,6 @@ jobs:
           # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop: permissif (exit-code=0) - warning seulement
           exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
-          continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
@@ -672,12 +833,39 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Trivy Scan Results Summary"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          if [ "${{ steps.trivy-scan.outcome }}" == "failure" ]; then
+          
+          # ⭐ Job Summary pour Trivy
+          echo "## 🔒 Trivy Security Scan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          SCAN_OUTCOME="${{ steps.trivy-scan.outcome }}"
+          if [ "$SCAN_OUTCOME" == "success" ]; then
+            echo "| Status | ✅ **Scan OK** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | No CRITICAL/HIGH vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SCAN_OUTCOME" == "failure" ]; then
+            echo "| Status | ❌ **Scan Failed** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | CRITICAL or HIGH vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.ref_name }}" == "main" ]; then
+              echo "| Impact | 🚫 **Blocking** (main branch - release blocked) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Impact | ⚠️ **Warning** (develop branch - non-blocking) |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Status | ⏭️ **Skipped** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Result | Scan was skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 View detailed results in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$SCAN_OUTCOME" == "failure" ]; then
             echo "❌ Trivy scan found CRITICAL or HIGH vulnerabilities"
             echo "Branch: ${{ github.ref_name }}"
-            echo "⚠️  TEMPORAIRE: Pipeline non-bloquant pour diagnostic"
-            echo "   Une fois les vulnérabilités identifiées et corrigées,"
-            echo "   le pipeline sera remis en mode bloquant sur main"
+            if [ "${{ github.ref_name }}" == "main" ]; then
+              echo "⚠️  Pipeline bloquant sur main : les vulnérabilités CRITICAL/HIGH bloquent la release"
+            else
+              echo "⚠️  Pipeline permissif sur develop : warning seulement (non-bloquant)"
+            fi
             echo ""
             echo "⚠️  Note: Trivy may fail due to:"
             echo "   1. CRITICAL/HIGH vulnerabilities in dependencies"
@@ -732,10 +920,9 @@ jobs:
     # Sur develop: continue même si sonar échoue (staging peut être déployé pour tester)
     # Sur main: bloque si sonar échoue (Quality Gate strict)
     if: |
-      ((github.event_name == 'pull_request' && github.base_ref == 'develop' || github.event_name == 'push' && github.ref_name == 'develop') ||
-       (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main')) &&
       github.event_name == 'push' &&
-      ((github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main') || needs.sonar.result == 'success')
+      (github.ref_name == 'develop' || github.ref_name == 'main') &&
+      (github.ref_name != 'main' || needs.sonar.result == 'success')
     concurrency:
       group: docker-build-backend-${{ github.ref_name }}
       cancel-in-progress: false
@@ -753,8 +940,11 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # ⭐ Utiliser secrets dédiés si disponibles (plus fiable que github.actor)
+          # Si GHCR_USERNAME secret existe, l'utiliser (doit correspondre au owner du PAT)
+          # Sinon, fallback sur github.actor
+          username: ${{ secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels)
         id: meta
@@ -763,7 +953,11 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix={{branch}}-
+            # ⭐ CRITIQUE: format=long pour garantir SHA complet (40 chars) = aligné avec deploy-staging
+            # Sans format=long, docker/metadata-action peut générer des tags SHA courts (ex: develop-1a2b3c4)
+            # ce qui causerait "image not found" dans deploy-staging qui cherche develop-<full-sha>
+            type=sha,prefix={{branch}}-,format=long
+            type=raw,value=run-${{ github.run_number }}
             # latest sera poussé uniquement dans docker-tag-release après succès de release
 
       - name: Build and push Docker image
@@ -775,6 +969,70 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      
+      # ⭐ Job Summary global : résumé de tous les checks critiques
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "# 📊 Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Build (dépend de lint + test)
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "| ✅ Build | Pass |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "| ❌ Build | Fail |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ⏭️ Build | Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # SonarCloud
+          if [ "${{ needs.sonar.result }}" == "success" ]; then
+            echo "| ✅ SonarCloud Analysis | Pass (Quality Gate OK) |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.sonar.result }}" == "failure" ]; then
+            echo "| ❌ SonarCloud Analysis | Fail (Quality Gate KO) |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.sonar.result }}" == "skipped" ]; then
+            echo "| ⏭️ SonarCloud Analysis | Skipped (fork PR, secrets absents, etc.) |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Note**: SonarCloud was skipped. On main branch, docker-build will be blocked (DevSecOps strict)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ⏭️ SonarCloud Analysis | Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # OWASP Dependency Check
+          if [ "${{ needs.dependency-check.result }}" == "success" ]; then
+            echo "| ✅ OWASP Dependency Check | Pass |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.dependency-check.result }}" == "failure" ]; then
+            echo "| ❌ OWASP Dependency Check | Fail |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ⏭️ OWASP Dependency Check | Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Trivy Security Scan
+          if [ "${{ needs.security-lint.result }}" == "success" ]; then
+            echo "| ✅ Trivy Security Scan | Pass |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.security-lint.result }}" == "failure" ]; then
+            echo "| ❌ Trivy Security Scan | Fail |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ⏭️ Trivy Security Scan | Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Docker Build
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "| ✅ Docker Build & Push | Pass |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Image tags pushed:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ job.status }}" == "failure" ]; then
+            echo "| ❌ Docker Build & Push | Fail |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ⏭️ Docker Build & Push | Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
 
   # ============================================
   # DEPLOY TO STAGING (for develop branch)
@@ -785,7 +1043,7 @@ jobs:
     needs: [docker-build]
     # ⭐ Meilleure pratique : Staging uniquement sur develop (environnement de test)
     # Main est pour la production (ou validation finale sur staging si nécessaire)
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref_name == 'develop'
     environment: staging
     timeout-minutes: 15
     # Permissif sur develop (staging peut échouer sans bloquer)
@@ -812,15 +1070,26 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Ajouter l'host à known_hosts pour éviter les prompts
-          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # ⭐ Sécurité SSH : utiliser KNOWN_HOSTS depuis secret si disponible (protection MITM)
+          # Sinon, fallback sur ssh-keyscan (acceptable pour staging, mais idéalement pinner l'empreinte)
+          if [ -n "${{ secrets.STAGING_KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.STAGING_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+            STRICT_CHECK="yes"
+            echo "✓ Using pinned SSH host fingerprint from secret (StrictHostKeyChecking=yes)"
+          else
+            # Fallback : ssh-keyscan (acceptable pour staging, mais moins sécurisé)
+            ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+            STRICT_CHECK="no"
+            echo "⚠️  Using ssh-keyscan (NON-SECURE mode - consider pinning host fingerprint in STAGING_KNOWN_HOSTS secret for production)"
+          fi
           # Configuration SSH optimisée
           cat >> ~/.ssh/config << EOF
           Host backend-staging
             HostName ${{ secrets.STAGING_HOST }}
             User ${{ secrets.STAGING_USER }}
             IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
+            StrictHostKeyChecking $STRICT_CHECK
             UserKnownHostsFile ~/.ssh/known_hosts
             ConnectTimeout 10
             ServerAliveInterval 60
@@ -874,9 +1143,11 @@ jobs:
           fi
           echo ""
           echo "Testing SSH connection (timeout: 30s)..."
+          # Utiliser StrictHostKeyChecking selon la présence de KNOWN_HOSTS
+          STRICT_CHECK="$([ -n "${{ secrets.STAGING_KNOWN_HOSTS }}" ] && echo "yes" || echo "no")"
           SSH_OUTPUT=$(timeout 30 ssh -F ~/.ssh/config \
             -o ConnectTimeout=10 \
-            -o StrictHostKeyChecking=no \
+            -o StrictHostKeyChecking=$STRICT_CHECK \
             -o BatchMode=yes \
             -o LogLevel=ERROR \
             -v backend-staging "echo 'SSH_SUCCESS'" 2>&1) || SSH_EXIT_CODE=$?
@@ -955,8 +1226,9 @@ jobs:
             exit 1
           fi
           echo "Copying docker-compose.yml via SCP..."
+          STRICT_CHECK="$([ -n "${{ secrets.STAGING_KNOWN_HOSTS }}" ] && echo "yes" || echo "no")"
           if scp -F ~/.ssh/config \
-              -o StrictHostKeyChecking=no \
+              -o StrictHostKeyChecking=$STRICT_CHECK \
               -o ConnectTimeout=10 \
               docker-compose.yml \
               backend-staging:/opt/hotel-ticket-hub-backend-staging/docker-compose.yml; then
@@ -964,7 +1236,7 @@ jobs:
           else
             echo "SCP failed, trying alternative method via SSH..."
             if cat docker-compose.yml | ssh -F ~/.ssh/config \
-                -o StrictHostKeyChecking=no \
+                -o StrictHostKeyChecking=$STRICT_CHECK \
                 -o ConnectTimeout=10 \
                 backend-staging "cat > /opt/hotel-ticket-hub-backend-staging/docker-compose.yml"; then
               echo "File copied successfully via SSH"
@@ -996,8 +1268,10 @@ jobs:
         if: steps.ssh_test.outputs.ssh_ok == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
+          # ⭐ Utiliser secrets dédiés si disponibles (plus fiable que github.actor)
+          # GHCR_USERNAME doit correspondre au owner du PAT (GHCR_TOKEN)
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
           GITHUB_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.STAGING_HOST }}
@@ -1011,6 +1285,16 @@ jobs:
           script: |
             set -euo pipefail  # Mode strict : erreur si variable non définie
             cd /opt/hotel-ticket-hub-backend-staging
+            
+            # ⭐ Compute branch context (pour scripts bash)
+            if [ "${{ github.event_name }}" == "pull_request" ]; then
+              IS_MAIN="${{ github.base_ref == 'main' }}"
+              IS_DEVELOP="${{ github.base_ref == 'develop' }}"
+            else
+              IS_MAIN="${{ github.ref_name == 'main' }}"
+              IS_DEVELOP="${{ github.ref_name == 'develop' }}"
+            fi
+            export IS_MAIN IS_DEVELOP
             
             echo "Stopping existing services..."
             # Stop old systemd service if it exists
@@ -1053,6 +1337,7 @@ jobs:
               echo "Create a PAT with 'read:packages' scope and add it as GHCR_TOKEN secret"
               exit 1
             fi
+            # Utiliser GHCR_USERNAME (secret dédié ou github.actor) pour correspondre au PAT
             GHCR_USER="${GHCR_USERNAME:-$GITHUB_ACTOR}"
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             
@@ -1087,9 +1372,9 @@ jobs:
             echo ""
             echo "Checking docker-compose.yml for image configuration:"
             grep -n "image:" docker-compose.yml || echo "⚠️  No 'image:' found in docker-compose.yml"
+            # ⭐ Utiliser IS_MAIN depuis $GITHUB_ENV (calculé au début du script)
             if ! grep -q '\${DOCKER_IMAGE}' docker-compose.yml && ! grep -q '\$DOCKER_IMAGE' docker-compose.yml; then
-              IS_MAIN="${{ github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main' }}"
-              if [ "$IS_MAIN" = "true" ]; then
+              if [ "$IS_MAIN" == "true" ]; then
                 echo "❌ ERROR: main branch requires docker-compose.yml to use \${DOCKER_IMAGE} variable"
                 echo "   This ensures deployment uses the exact commit SHA image (zero ambiguity)."
                 echo "   Fix: Add 'services.backend.image: \${DOCKER_IMAGE}' to docker-compose.yml"
@@ -1127,17 +1412,23 @@ jobs:
             echo "Listing containers managed by Docker Compose:"
             $COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" ps
             
-            # Récupérer le nom du service depuis docker-compose.yml (premier service sous services:, pas networks/volumes)
-            # Utiliser awk pour parser correctement la structure YAML et trouver le premier service
-            SERVICE_NAME=$(
-              awk '
-                $1=="services:" {in_services=1; next}
-                in_services && $1 ~ /^[a-zA-Z0-9_-]+:$/ {gsub(":","",$1); print $1; exit}
-                in_services && $1 ~ /^(networks|volumes):$/ {exit}
-              ' docker-compose.yml
-            )
+            # ⭐ Robustesse : détecter le service ou utiliser un fallback explicite
+            # Option 1 : définir explicitement SERVICE_NAME=backend (plus fiable)
+            # Option 2 : parser docker-compose.yml (fallback si SERVICE_NAME non défini)
+            SERVICE_NAME="${SERVICE_NAME:-}"
+            if [ -z "$SERVICE_NAME" ]; then
+              # Parser docker-compose.yml pour trouver le premier service
+              SERVICE_NAME=$(
+                awk '
+                  $1=="services:" {in_services=1; next}
+                  in_services && $1 ~ /^[a-zA-Z0-9_-]+:$/ {gsub(":","",$1); print $1; exit}
+                  in_services && $1 ~ /^(networks|volumes):$/ {exit}
+                ' docker-compose.yml
+              )
+            fi
+            # Fallback final explicite (évite les erreurs si parsing échoue)
             SERVICE_NAME="${SERVICE_NAME:-backend}"
-            echo "Service name detected: $SERVICE_NAME"
+            echo "Service name: $SERVICE_NAME (detected from docker-compose.yml or fallback)"
             
             # Récupérer l'ID du container via compose ps (avec project name pour cohérence)
             CONTAINER_ID=$($COMPOSE_CMD -p "$COMPOSE_PROJECT_NAME" ps -q "$SERVICE_NAME" 2>/dev/null | head -n 1 || true)
@@ -1177,8 +1468,10 @@ jobs:
             RETRY_COUNT=0
             HEALTHY=false
             
-            # Note: Healthcheck depuis l'hôte nécessite que le port soit publié (ex: 8081:8080)
-            # Si le port n'est pas publié, on utilise docker exec pour checker depuis l'intérieur du container
+            # ⚠️ Note: Healthcheck depuis l'hôte nécessite que le port soit publié (ex: 8081:8080)
+            # Si le port n'est pas publié ou si le mapping change, le check "host" tombera
+            # et on dépendra du fallback docker exec (déjà implémenté, donc pas bloquant)
+            # Si un jour tu changes le mapping de port, mettre à jour cette valeur ou le check tombera
             echo "Note: Healthcheck requires published port 8081 (or will check inside container)"
             
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
@@ -1280,7 +1573,7 @@ jobs:
     needs: [deploy-staging]
     # ⭐ Meilleure pratique : Monitoring uniquement sur develop (avec staging)
     # Le monitoring surveille l'environnement staging
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref_name == 'develop'
     environment: monitoring
     timeout-minutes: 15
     continue-on-error: true
@@ -1309,15 +1602,26 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.MONITORING_SSH_PRIVATE_KEY }}" > ~/.ssh/monitoring_key
           chmod 600 ~/.ssh/monitoring_key
-          # Ajouter l'host à known_hosts
-          ssh-keyscan -H ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # ⭐ Sécurité SSH : utiliser KNOWN_HOSTS depuis secret si disponible (protection MITM)
+          # Sinon, fallback sur ssh-keyscan (acceptable pour staging, mais idéalement pinner l'empreinte)
+          if [ -n "${{ secrets.MONITORING_KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.MONITORING_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+            STRICT_CHECK="yes"
+            echo "✓ Using pinned SSH host fingerprint from secret (StrictHostKeyChecking=yes)"
+          else
+            # Fallback : ssh-keyscan (acceptable pour staging, mais moins sécurisé)
+            ssh-keyscan -H ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+            STRICT_CHECK="no"
+            echo "⚠️  Using ssh-keyscan (NON-SECURE mode - consider pinning host fingerprint in MONITORING_KNOWN_HOSTS secret for production)"
+          fi
           # Configuration SSH optimisée
           cat >> ~/.ssh/config << EOF
           Host monitoring-vm
             HostName ${{ secrets.MONITORING_HOST }}
             User ${{ secrets.MONITORING_USER }}
             IdentityFile ~/.ssh/monitoring_key
-            StrictHostKeyChecking no
+            StrictHostKeyChecking $STRICT_CHECK
             UserKnownHostsFile ~/.ssh/known_hosts
             ConnectTimeout 10
             ServerAliveInterval 60
@@ -1328,7 +1632,8 @@ jobs:
       - name: Test SSH Connection
         run: |
           echo "Testing SSH connection to Monitoring VM..."
-          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=no monitoring-vm "echo 'SSH connection successful'" || {
+          STRICT_CHECK="$([ -n "${{ secrets.MONITORING_KNOWN_HOSTS }}" ] && echo "yes" || echo "no")"
+          timeout 10 ssh -F ~/.ssh/config -o ConnectTimeout=5 -o StrictHostKeyChecking=$STRICT_CHECK monitoring-vm "echo 'SSH connection successful'" || {
             echo "ERROR: SSH connection failed"
             echo "Verify that:"
             echo "  - The Monitoring VM is accessible from GitHub Actions"
@@ -1360,22 +1665,25 @@ jobs:
             echo "ERROR: monitoring directory not found in workspace"
             exit 1
           fi
+          # Déterminer StrictHostKeyChecking selon la présence de KNOWN_HOSTS
+          STRICT_CHECK="$([ -n "${{ secrets.MONITORING_KNOWN_HOSTS }}" ] && echo "yes" || echo "no")"
+          
           echo "Preparing directories on VM with correct permissions..."
           ssh -F ~/.ssh/config \
-              -o StrictHostKeyChecking=no \
+              -o StrictHostKeyChecking=$STRICT_CHECK \
               -o ConnectTimeout=10 \
               monitoring-vm "sudo mkdir -p ${{ env.MONITORING_DIR }}/grafana/dashboards && sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/grafana/dashboards" || true
           
           echo "Copying monitoring files via SCP..."
           if scp -F ~/.ssh/config \
-              -o StrictHostKeyChecking=no \
+              -o StrictHostKeyChecking=$STRICT_CHECK \
               -o ConnectTimeout=10 \
               -r monitoring/* \
               monitoring-vm:${{ env.MONITORING_DIR }}/; then
             echo "Files copied successfully via SCP"
             # Fix permissions for grafana dashboards if needed
             ssh -F ~/.ssh/config \
-                -o StrictHostKeyChecking=no \
+                -o StrictHostKeyChecking=$STRICT_CHECK \
                 -o ConnectTimeout=10 \
                 monitoring-vm "sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/grafana/dashboards 2>/dev/null || true"
           else
@@ -1386,11 +1694,11 @@ jobs:
               # Use sudo for grafana/dashboards directory
               if echo "$file" | grep -q "grafana/dashboards"; then
                 ssh -F ~/.ssh/config \
-                    -o StrictHostKeyChecking=no \
+                    -o StrictHostKeyChecking=$STRICT_CHECK \
                     -o ConnectTimeout=10 \
                     monitoring-vm "sudo mkdir -p $target_dir && sudo chown -R ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} $target_dir" || true
                 cat "$file" | ssh -F ~/.ssh/config \
-                    -o StrictHostKeyChecking=no \
+                    -o StrictHostKeyChecking=$STRICT_CHECK \
                     -o ConnectTimeout=10 \
                     monitoring-vm "sudo tee ${{ env.MONITORING_DIR }}/$file > /dev/null && sudo chown ${{ secrets.MONITORING_USER }}:${{ secrets.MONITORING_USER }} ${{ env.MONITORING_DIR }}/$file" || {
                   echo "ERROR: Failed to copy $file"
@@ -1398,11 +1706,11 @@ jobs:
                 }
               else
                 ssh -F ~/.ssh/config \
-                    -o StrictHostKeyChecking=no \
+                    -o StrictHostKeyChecking=$STRICT_CHECK \
                     -o ConnectTimeout=10 \
                     monitoring-vm "mkdir -p $target_dir" || true
                 cat "$file" | ssh -F ~/.ssh/config \
-                    -o StrictHostKeyChecking=no \
+                    -o StrictHostKeyChecking=$STRICT_CHECK \
                     -o ConnectTimeout=10 \
                     monitoring-vm "cat > ${{ env.MONITORING_DIR }}/$file" || {
                   echo "ERROR: Failed to copy $file"
@@ -1740,11 +2048,17 @@ jobs:
   # ============================================
   # RELEASE (semantic versioning + changelog)
   # ============================================
+  # ⭐ Note: Utilise semantic-release (Node.js) même pour un backend Java
+  # C'est une approche valide pour automatiser les versions et le changelog
+  # Le job skip proprement si package.json n'existe pas (pas de bruit dans la pipeline)
+  # Alternative: utiliser maven-release-plugin si préférence pour un workflow 100% Maven
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [lint, test, coverage, build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, test, coverage, build, sonar]
+    # ⭐ DevSecOps strict : Release uniquement si SonarCloud Quality Gate passe
+    # Évite de créer une release si Quality Gate est KO
+    if: github.event_name == 'push' && github.ref_name == 'main' && needs.sonar.result == 'success'
     concurrency:
       group: release-main
       cancel-in-progress: false
@@ -1838,7 +2152,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [release, docker-build]
     # Ne s'exécute que si release a réussi ET package.json existe (semantic-release a pu créer un tag)
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.result == 'success' && needs.release.outputs.package_exists == 'true'
+    if: github.event_name == 'push' && github.ref_name == 'main' && needs.release.result == 'success' && needs.release.outputs.package_exists == 'true'
     concurrency:
       group: release-main
       cancel-in-progress: false
@@ -1885,6 +2199,8 @@ jobs:
       - name: Tag Docker image with release version (from commit SHA)
         if: steps.git_tag.outputs.tag_exists == 'true'
         run: |
+          set -euo pipefail
+          
           # Image exacte produite par docker-build pour ce commit (plus sûr que :main)
           SOURCE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}"
           TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.git_tag.outputs.version }}"
@@ -1913,3 +2229,13 @@ jobs:
           docker tag "$SOURCE_IMAGE" "$LATEST_IMAGE"
           docker push "$LATEST_IMAGE"
           echo "✓ Successfully pushed latest tag: $LATEST_IMAGE"
+          
+          # ⭐ Job Summary: Afficher les tags Docker dans le résumé GitHub
+          echo "## 🐳 Docker Release Tags" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`$TARGET_IMAGE\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Latest | \`$LATEST_IMAGE\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Git Tag: \`${{ steps.git_tag.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
