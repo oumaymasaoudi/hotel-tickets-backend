@@ -775,6 +775,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ⭐ Setup Java et Maven pour générer le SBOM
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      # ⭐ SOLUTION PROPRE: Générer un SBOM CycloneDX pour un scan Trivy plus fiable
+      # Avantages:
+      # - Résout correctement les versions Maven (plus de warning "Dependency version cannot be determined")
+      # - Inclut toutes les dépendances transitives avec leurs versions exactes
+      # - Scan plus rapide et plus précis que le scan filesystem du pom.xml
+      - name: Generate SBOM (CycloneDX)
+        id: generate-sbom
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Generating CycloneDX SBOM for Trivy scan"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          # Générer le SBOM avec le plugin CycloneDX Maven (sans exécuter les tests)
+          mvn -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.8.2:makeAggregateBom
+          
+          # Vérifier que le SBOM a été généré
+          if [ -f "target/bom.json" ]; then
+            echo "✓ SBOM generated successfully: target/bom.json"
+            ls -lh target/bom.json
+            echo "sbom_path=target/bom.json" >> $GITHUB_OUTPUT
+            echo "sbom_exists=true" >> $GITHUB_OUTPUT
+          elif [ -f "target/bom.xml" ]; then
+            echo "✓ SBOM generated successfully: target/bom.xml"
+            ls -lh target/bom.xml
+            echo "sbom_path=target/bom.xml" >> $GITHUB_OUTPUT
+            echo "sbom_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  SBOM not found, falling back to filesystem scan"
+            echo "sbom_exists=false" >> $GITHUB_OUTPUT
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
       # Installer Trivy pour l'étape de diagnostic
       - name: Setup Trivy for diagnostics
         uses: aquasecurity/setup-trivy@v0.2.1
@@ -788,16 +827,24 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Trivy Vulnerability Scan (Table Format - Diagnostic)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          # Utiliser exit-code 0 pour voir les résultats même s'il y a des vulnérabilités
-          # Note: --skip-dirs pour éviter de scanner node_modules et autres dossiers non pertinents
-          # --skip-files pour éviter les fichiers de configuration non critiques
-          trivy fs . \
-            --severity CRITICAL,HIGH \
-            --format table \
-            --scanners vuln \
-            --exit-code 0 \
-            --skip-dirs node_modules,target,.git \
-            --skip-files "**/*.md,**/*.txt" || echo "⚠️  Trivy table scan completed with warnings"
+          # Utiliser le SBOM si disponible, sinon fallback sur filesystem
+          if [ "${{ steps.generate-sbom.outputs.sbom_exists }}" == "true" ]; then
+            echo "📦 Scanning SBOM: ${{ steps.generate-sbom.outputs.sbom_path }}"
+            trivy sbom "${{ steps.generate-sbom.outputs.sbom_path }}" \
+              --severity CRITICAL,HIGH \
+              --format table \
+              --scanners vuln \
+              --exit-code 0 || echo "⚠️  Trivy SBOM scan completed with warnings"
+          else
+            echo "📁 Fallback: Scanning filesystem"
+            trivy fs . \
+              --severity CRITICAL,HIGH \
+              --format table \
+              --scanners vuln \
+              --exit-code 0 \
+              --skip-dirs node_modules,target,.git \
+              --skip-files "**/*.md,**/*.txt" || echo "⚠️  Trivy table scan completed with warnings"
+          fi
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ⭐ Cache Trivy DB pour améliorer la fiabilité (évite rate-limits et téléchargements répétés)
@@ -809,14 +856,47 @@ jobs:
           restore-keys: |
             trivy-db-${{ runner.os }}
 
-      # ⭐ AMÉLIORATION: Pinner version Trivy au lieu de @master (plus stable)
+      # ⭐ SOLUTION PROPRE: Scanner le SBOM au lieu du pom.xml pour un scan plus fiable
       # ⭐ AMÉLIORATION DevSecOps: exit-code conditionnel - bloquant sur main, permissif sur develop
-      - name: Run Trivy vulnerability scanner
+      # Avantages du scan SBOM:
+      # - Plus de warning "Dependency version cannot be determined"
+      # - Versions résolues correctement (inclut les dépendances transitives)
+      # - Scan plus rapide et plus précis
+      - name: Run Trivy vulnerability scanner (SBOM)
         id: trivy-scan
+        if: steps.generate-sbom.outputs.sbom_exists == 'true'
         uses: aquasecurity/trivy-action@0.28.0
         # ⭐ Bloquer sur main, permissif sur develop et branches feature (gère PR correctement)
         # Sur main: strict - toutes les vulnérabilités CRITICAL/HIGH bloquent
         # Sur develop/feature: permissif - warning seulement, pipeline continue
+        # ⚠️ IMPORTANT: continue-on-error permet au job de passer même si Trivy retourne exit code 1
+        # Le step sera marqué "failed" (rouge) mais le job sera "success" (vert) pour les dépendances
+        continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
+        env:
+          TRIVY_CACHE_DIR: ~/.cache/trivy
+        with:
+          scan-type: 'sbom'
+          scan-ref: '${{ steps.generate-sbom.outputs.sbom_path }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop et branches feature (gère PR correctement)
+          # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
+          # Sur develop/feature: permissif (exit-code=0) - warning seulement, ne bloque pas le pipeline
+          # ⚠️ NOTE: Même avec exit-code='0', Trivy peut retourner exit code 1 si des vulnérabilités sont trouvées
+          # C'est pourquoi continue-on-error est nécessaire pour garantir que le pipeline passe
+          exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
+          # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
+          # Sur develop/feature: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
+          ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
+          # Scanner uniquement les vulnérabilités (pas les secrets pour éviter les faux positifs)
+          scanners: 'vuln'
+
+      # ⭐ FALLBACK: Si le SBOM n'a pas pu être généré, utiliser le scan filesystem
+      - name: Run Trivy vulnerability scanner (Filesystem fallback)
+        id: trivy-scan-fallback
+        if: steps.generate-sbom.outputs.sbom_exists != 'true'
+        uses: aquasecurity/trivy-action@0.28.0
         continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
         env:
           TRIVY_CACHE_DIR: ~/.cache/trivy
@@ -826,22 +906,10 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop et branches feature (gère PR correctement)
-          # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
-          # Sur develop/feature: permissif (exit-code=0) - warning seulement, ne bloque pas le pipeline
-          # Note: exit-code='0' force Trivy à retourner exit code 0 même si des vulnérabilités sont trouvées
           exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
-          # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
-          # Sur develop/feature: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
-          # Scanner uniquement les vulnérabilités (pas les secrets pour éviter les faux positifs)
           scanners: 'vuln'
-          # ⭐ Optimisation: Exclure les dossiers non pertinents pour améliorer la performance et réduire les warnings Maven
-          # Note: skip-dirs est un paramètre valide de trivy-action@0.28.0 (liste séparée par virgules)
-          # Trivy scanne automatiquement pom.xml et package.json, donc on peut exclure node_modules et target
-          # Note: Trivy peut quand même scanner node_modules pour package.json, mais skip-dirs réduit le bruit
           skip-dirs: 'node_modules,target,.git'
-          # Exclure aussi les fichiers non pertinents (réduit encore plus le bruit)
           skip-files: '**/*.md,**/*.txt,**/*.log'
       
       # Afficher un résumé des résultats Trivy pour diagnostic
@@ -856,7 +924,17 @@ jobs:
           echo "## 🔒 Trivy Security Scan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          SCAN_OUTCOME="${{ steps.trivy-scan.outcome }}"
+          # Déterminer quel scan a été utilisé (SBOM ou fallback filesystem)
+          if [ "${{ steps.generate-sbom.outputs.sbom_exists }}" == "true" ]; then
+            echo "| Scan Type | 📦 **SBOM (CycloneDX)** |" >> $GITHUB_STEP_SUMMARY
+            echo "| SBOM File | \`${{ steps.generate-sbom.outputs.sbom_path }}\` |" >> $GITHUB_STEP_SUMMARY
+            SCAN_OUTCOME="${{ steps.trivy-scan.outcome }}"
+          else
+            echo "| Scan Type | 📁 **Filesystem (Fallback)** |" >> $GITHUB_STEP_SUMMARY
+            echo "| Note | SBOM generation failed, using filesystem scan |" >> $GITHUB_STEP_SUMMARY
+            SCAN_OUTCOME="${{ steps.trivy-scan-fallback.outcome }}"
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
           if [ "$SCAN_OUTCOME" == "success" ]; then
             echo "| Status | ✅ **Scan OK** |" >> $GITHUB_STEP_SUMMARY
             echo "| Result | No CRITICAL/HIGH vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
