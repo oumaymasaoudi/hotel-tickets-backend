@@ -1,5 +1,8 @@
 package com.hotel.tickethub.service;
 
+import com.hotel.tickethub.dto.AuditLogRequest;
+import com.hotel.tickethub.exception.ConflictException;
+import com.hotel.tickethub.exception.ResourceNotFoundException;
 import com.hotel.tickethub.model.*;
 import com.hotel.tickethub.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,7 +92,7 @@ class GdprServiceTest {
         // Then
         assertNotNull(result);
         verify(consentRepository, times(1)).save(any(GdprConsent.class));
-        verify(auditLogService, times(1)).logAction(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditLogService, times(1)).logAction(any(AuditLogRequest.class));
     }
 
     @Test
@@ -114,7 +117,7 @@ class GdprServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
+        assertThrows(ResourceNotFoundException.class, () -> {
             gdprService.recordConsent(userId, "MARKETING", true, "127.0.0.1", "Mozilla");
         });
     }
@@ -181,7 +184,7 @@ class GdprServiceTest {
         assertTrue(result.containsKey("payments"));
         assertTrue(result.containsKey("gdprConsents"));
         assertTrue(result.containsKey("auditLogs"));
-        verify(auditLogService, times(1)).logAction(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditLogService, times(1)).logAction(any(AuditLogRequest.class));
     }
 
     @Test
@@ -190,7 +193,7 @@ class GdprServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
+        assertThrows(ResourceNotFoundException.class, () -> {
             gdprService.exportUserData(userId);
         });
     }
@@ -225,7 +228,7 @@ class GdprServiceTest {
                 .thenReturn(Arrays.asList(existingRequest));
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
+        assertThrows(ConflictException.class, () -> {
             gdprService.requestDataDeletion(userId, "127.0.0.1");
         });
     }
