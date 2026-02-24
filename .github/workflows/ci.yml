@@ -1540,36 +1540,66 @@ jobs:
             df -h / | tail -1
             DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
             
-            # Si le disque est toujours plein après nettoyage agressif, essayer une dernière solution
+            # Si le disque est toujours plein après nettoyage agressif, arrêter temporairement les services monitoring
             if [ "$DISK_USAGE" -gt 95 ]; then
-              echo "⚠️  WARNING: Disk usage still above 95% ($DISK_USAGE%) after cleanup"
-              echo "   Attempting final cleanup: removing old image layers..."
+              echo "⚠️  CRITICAL: Disk usage still above 95% ($DISK_USAGE%) after cleanup"
+              echo "   All Docker images are in use by active containers"
+              echo "   Attempting emergency cleanup: temporarily stopping monitoring services..."
               
-              # Essayer de supprimer les anciennes couches d'images (plus risqué mais nécessaire)
-              # Cette commande peut libérer de l'espace même si les images sont "utilisées"
-              echo "   Checking for old image layers..."
-              docker images --format "{{.Repository}}:{{.Tag}}" | while read image; do
-                # Ignorer les images du monitoring
-                if echo "$image" | grep -vqE "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)"; then
-                  echo "   Removing old layers from: $image"
-                  docker rmi "$image" 2>/dev/null || true
-                fi
-              done
+              # Sauvegarder l'état actuel des conteneurs monitoring
+              MONITORING_CONTAINERS=$(docker ps --format "{{.Names}}" | grep -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | tr '\n' ' ' || true)
               
-              # Vérifier à nouveau
-              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              if [ -n "$MONITORING_CONTAINERS" ]; then
+                echo "   Stopping monitoring containers temporarily: $MONITORING_CONTAINERS"
+                # Arrêter les services monitoring (les volumes seront préservés)
+                docker stop $MONITORING_CONTAINERS 2>/dev/null || true
+                sleep 2
+                
+                # Maintenant on peut supprimer les images (elles ne sont plus utilisées)
+                echo "   Removing unused images after stopping containers..."
+                docker image prune -af || true
+                
+                # Nettoyer les anciennes versions d'images (garder seulement les plus récentes)
+                echo "   Removing old image versions..."
+                docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | sort -V | head -n -7 | awk '{print $2}' | xargs -r docker rmi 2>/dev/null || true
+                
+                # Nettoyage système final
+                docker system prune -af || true
+                
+                # Vérifier l'espace libéré
+                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                echo "   Disk usage after emergency cleanup: ${DISK_USAGE}%"
+                
+                # Redémarrer les services monitoring (sera fait plus tard dans le script)
+                echo "   Monitoring services will be restarted after image pull"
+              else
+                echo "   No monitoring containers found, performing final cleanup..."
+                docker image prune -af || true
+                docker system prune -af || true
+                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              fi
+              
+              # Si toujours plein, erreur critique
               if [ "$DISK_USAGE" -gt 95 ]; then
-                echo "❌ ERROR: Disk usage is still above 95% ($DISK_USAGE%) after aggressive cleanup"
-                echo "   Manual intervention required:"
-                echo "   - Increase EBS volume size in AWS (recommended: 20GB minimum)"
-                echo "   - Or manually clean up old Docker images on the server"
+                echo "❌ ERROR: Disk usage is still above 95% ($DISK_USAGE%) after emergency cleanup"
+                echo "   The EBS volume is too small (6.8GB). Manual intervention required:"
+                echo ""
+                echo "   SOLUTION 1 (RECOMMANDÉ): Increase EBS volume size in AWS"
+                echo "   1. Go to AWS Console > EC2 > Volumes"
+                echo "   2. Select the volume attached to the monitoring instance"
+                echo "   3. Actions > Modify Volume > Increase to 20GB minimum"
+                echo "   4. SSH to the instance and run:"
+                echo "      sudo growpart /dev/xvda 1"
+                echo "      sudo resize2fs /dev/xvda1"
+                echo ""
+                echo "   SOLUTION 2 (TEMPORAIRE): Manual cleanup via SSH"
+                echo "   SSH to the server and run:"
+                echo "   docker system prune -af  # ⚠️ This will remove unused images"
+                echo ""
                 echo "   Current disk usage:"
                 df -h /
                 echo "   Docker disk usage:"
                 docker system df || true
-                echo ""
-                echo "   To manually clean up on the server, SSH and run:"
-                echo "   docker system prune -af --volumes  # ⚠️ WARNING: This will delete volumes!"
                 exit 1
               fi
             fi
