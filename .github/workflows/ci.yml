@@ -62,6 +62,10 @@ permissions:
   contents: read
   security-events: write
 
+# ⭐ AMÉLIORATION CRITIQUE: Variables pour déterminer la branche (gère PR correctement)
+# En PR: github.ref = refs/pull/123/merge, donc on utilise github.base_ref (branche cible)
+# En push: github.ref = refs/heads/main, donc on utilise github.ref_name
+# Note: Pour les conditions if au niveau job, utiliser directement l'expression (env n'est pas disponible)
 env:
   JAVA_VERSION: '17'
   MAVEN_OPTS: '-Xmx2048m -XX:+UseG1GC'
@@ -89,14 +93,14 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       
-      # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop
+      # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop (gère PR correctement)
       - name: Run Maven Checkstyle
         run: mvn -B checkstyle:check
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
       
       - name: Run Maven SpotBugs
         run: mvn -B spotbugs:spotbugs -Duser.language=en -Duser.country=US
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
         env:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
       
@@ -223,12 +227,15 @@ jobs:
           echo "  - Coverage percentage: ${COVERAGE_NUM}%"
           echo "  - Threshold: ${COVERAGE_THRESHOLD}%"
           
+          # Déterminer si on est sur main (gère PR correctement)
+          IS_MAIN="${{ github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main' }}"
+          
           # Vérifier que le counter existe et que les données sont valides
           if [ "$TOTAL" = "0" ] || [ -z "$COVERAGE_NUM" ] || [ "$COUNTER_TYPE" = "ERROR" ]; then
             echo "❌ ERROR: Could not parse coverage data from jacoco.xml"
             echo "   Counter types INSTRUCTION and LINE not found, or file format changed"
             echo "   This indicates a pipeline issue that needs investigation"
-            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            if [ "$IS_MAIN" = "true" ]; then
               echo "   ❌ Failing on main branch (DevSecOps strict: cannot proceed without coverage data)"
               exit 1
             else
@@ -241,7 +248,7 @@ jobs:
               echo "✓ Coverage ${COVERAGE_NUM}% meets threshold ${COVERAGE_THRESHOLD}%"
             else
               echo "❌ Coverage ${COVERAGE_NUM}% is below threshold ${COVERAGE_THRESHOLD}%"
-              if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              if [ "$IS_MAIN" = "true" ]; then
                 exit 1
               else
                 echo "⚠️  Warning only (not on main branch)"
@@ -330,8 +337,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test, coverage]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
-    # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail, permissif sur develop
-    continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+    # ⭐ AMÉLIORATION TOP 2: Bloquer sur main si Quality Gate fail, permissif sur develop (gère PR correctement)
+    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
     
     steps:
       - name: Checkout code
@@ -428,7 +435,7 @@ jobs:
       - name: SonarCloud Analysis (Maven)
         id: sonarcloud-scan
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Starting SonarCloud Analysis..."
@@ -454,7 +461,9 @@ jobs:
             -Dsonar.organization=oumaymasaoudi \
             -Dsonar.projectKey=oumaymasaoudi_hotel-tickets-backend \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.branch.name=${{ github.ref_name }} \
+            -Dsonar.branch.name=${{ github.ref_name }}
           
           SONAR_EXIT_CODE=$?
           if [ $SONAR_EXIT_CODE -ne 0 ]; then
@@ -506,8 +515,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
-    # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop
-    continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+    # ⭐ AMÉLIORATION: Bloquer sur main si CVSS >= 7, permissif sur develop (gère PR correctement)
+    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
     
     steps:
       - name: Checkout code
@@ -530,7 +539,7 @@ jobs:
           # Exclure node_modules et fichiers non-Java pour scanner uniquement les dépendances Maven
           # dependency-check détecte automatiquement pom.xml et scanne les dépendances Maven uniquement
           args: '--failOnCVSS=7 --enableRetired --enableExperimental --exclude "**/node_modules/**" --exclude "**/package*.json" --exclude "**/.git/**" --exclude "**/target/**"'
-        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
 
       # Debug: Lister les fichiers générés par dependency-check (robustesse)
       - name: Debug Dependency-Check outputs
@@ -607,8 +616,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
-    # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop
-    continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+    # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop (gère PR correctement)
+    continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
     
     steps:
       - name: Checkout code
@@ -645,12 +654,14 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          # ⚠️  TEMPORAIRE: exit-code=0 pour voir les résultats même s'il y a des vulnérabilités
-          #     Une fois les vulnérabilités identifiées, remettre: exit-code: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
-          exit-code: '0'  # ⚠️  TEMPORAIRE: non-bloquant pour diagnostic
+          # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop (gère PR correctement)
+          # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
+          # Sur develop: permissif (exit-code=0) - warning seulement
+          exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
+          continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
-          ignore-unfixed: ${{ github.ref != 'refs/heads/main' }}
+          ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
           # Scanner uniquement les vulnérabilités (pas les secrets pour éviter les faux positifs)
           scanners: 'vuln'
       
@@ -715,10 +726,16 @@ jobs:
     runs-on: ubuntu-latest
     # ⭐ AMÉLIORATION BONUS: Docker build attend security checks + SonarCloud Quality Gate (DevSecOps strict)
     # Sur main : pas d'image si Sonar Quality Gate KO
+    # ⚠️ IMPORTANT: Utiliser needs.sonar.result pour permettre l'exécution même si sonar échoue sur develop
     needs: [build, dependency-check, security-lint, sonar]
     # ⭐ AMÉLIORATION: Docker build pour develop (staging) et main (release)
-    # Guard: ne jamais lancer sur schedule (uniquement sur push)
-    if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+    # Sur develop: continue même si sonar échoue (staging peut être déployé pour tester)
+    # Sur main: bloque si sonar échoue (Quality Gate strict)
+    if: |
+      ((github.event_name == 'pull_request' && github.base_ref == 'develop' || github.event_name == 'push' && github.ref_name == 'develop') ||
+       (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main')) &&
+      github.event_name == 'push' &&
+      ((github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main') || needs.sonar.result == 'success')
     concurrency:
       group: docker-build-backend-${{ github.ref_name }}
       cancel-in-progress: false
@@ -1071,7 +1088,8 @@ jobs:
             echo "Checking docker-compose.yml for image configuration:"
             grep -n "image:" docker-compose.yml || echo "⚠️  No 'image:' found in docker-compose.yml"
             if ! grep -q '\${DOCKER_IMAGE}' docker-compose.yml && ! grep -q '\$DOCKER_IMAGE' docker-compose.yml; then
-              if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              IS_MAIN="${{ github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main' }}"
+              if [ "$IS_MAIN" = "true" ]; then
                 echo "❌ ERROR: main branch requires docker-compose.yml to use \${DOCKER_IMAGE} variable"
                 echo "   This ensures deployment uses the exact commit SHA image (zero ambiguity)."
                 echo "   Fix: Add 'services.backend.image: \${DOCKER_IMAGE}' to docker-compose.yml"
@@ -1446,6 +1464,7 @@ jobs:
             
             echo "Checking disk space..."
             df -h / | tail -1
+            DISK_USAGE_INITIAL=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
             
             echo "Safe Docker disk space cleanup (preserving volumes)..."
             
@@ -1458,20 +1477,44 @@ jobs:
             echo "Removing stopped non-critical containers..."
             docker ps -a --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker rm 2>/dev/null || true
             
-            # Supprimer les images non utilisées (sauf celles du monitoring)
-            # Supprimer les images non utilisées de +24h (les conteneurs monitoring en cours utilisent leurs images)
-            # Note: Les images utilisées par les conteneurs actifs ne seront pas supprimées
-            echo "Removing unused images (older than 24h)..."
-            docker image prune -af --filter "until=24h" || true
+            # Supprimer les images dangling (sans tag) - SÉCURISÉ
+            echo "Removing dangling images..."
+            docker image prune -f || true
             
-            # Nettoyer le build cache uniquement
-            echo "Cleaning build cache..."
-            docker builder prune -af --filter "until=24h" || true
+            # Supprimer les images non utilisées (sans filtre de temps si disque plein)
+            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
+              echo "⚠️  Disk usage > 90%, performing aggressive cleanup..."
+              # Supprimer toutes les images non utilisées (pas seulement celles de +24h)
+              echo "Removing all unused images..."
+              docker image prune -af || true
+            else
+              echo "Removing unused images (older than 24h)..."
+              docker image prune -af --filter "until=24h" || true
+            fi
             
-            # Nettoyer les logs Docker (limité à 1 jour)
-            echo "Cleaning Docker logs (older than 1 day)..."
-            find /var/lib/docker/containers/ -type f -name "*.log" -mtime +1 -delete 2>/dev/null || true
-            journalctl --vacuum-time=1d 2>/dev/null || true
+            # Nettoyer le build cache (plus agressif si disque plein)
+            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
+              echo "Cleaning all build cache..."
+              docker builder prune -af || true
+            else
+              echo "Cleaning build cache (older than 24h)..."
+              docker builder prune -af --filter "until=24h" || true
+            fi
+            
+            # Nettoyer les logs Docker (plus agressif si disque plein)
+            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
+              echo "Cleaning Docker logs (all logs, not just 1 day old)..."
+              find /var/lib/docker/containers/ -type f -name "*.log" -delete 2>/dev/null || true
+              # Limiter la taille des logs actuels
+              for container in $(docker ps --format "{{.Names}}"); do
+                docker logs --tail 100 "$container" > /dev/null 2>&1 || true
+              done
+              journalctl --vacuum-time=1h 2>/dev/null || true
+            else
+              echo "Cleaning Docker logs (older than 1 day)..."
+              find /var/lib/docker/containers/ -type f -name "*.log" -mtime +1 -delete 2>/dev/null || true
+              journalctl --vacuum-time=1d 2>/dev/null || true
+            fi
             
             # ⭐ AMÉLIORATION: Ne JAMAIS supprimer les volumes (risque de perte de données Grafana/Prometheus)
             # docker volume prune est DANGEREUX - on ne le fait PAS
@@ -1481,8 +1524,13 @@ jobs:
             docker network ls --format "{{.Name}}" | grep -v -E "(monitoring-network|bridge|host)" | xargs -r docker network rm 2>/dev/null || true
             
             # Nettoyage système sécurisé (SANS --volumes pour préserver les données)
-            echo "Safe system prune (preserving volumes)..."
-            docker system prune -af --filter "until=24h" || true
+            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
+              echo "Performing aggressive system prune (preserving volumes)..."
+              docker system prune -af || true
+            else
+              echo "Safe system prune (preserving volumes)..."
+              docker system prune -af --filter "until=24h" || true
+            fi
             
             # Vérifier l'espace utilisé par Docker
             echo "Docker disk usage:"
@@ -1490,19 +1538,70 @@ jobs:
             
             echo "Disk space after cleanup:"
             df -h / | tail -1
-            
-            # Si le disque est toujours plein, afficher un warning (ne pas supprimer containerd snapshots - trop risqué)
             DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            if [ "$DISK_USAGE" -gt 90 ]; then
-              echo "⚠️  WARNING: Disk usage is still above 90% ($DISK_USAGE%)"
-              echo "   Manual intervention required:"
-              echo "   - Consider increasing EBS volume size (AWS)"
-              echo "   - Review and remove old Docker images manually"
-              echo "   - Do NOT delete containerd snapshots (can break Docker)"
-              echo "   Current disk usage:"
-              df -h /
-              echo "   Docker disk usage:"
-              docker system df || true
+            
+            # Si le disque est toujours plein après nettoyage agressif, arrêter temporairement les services monitoring
+            if [ "$DISK_USAGE" -gt 95 ]; then
+              echo "⚠️  CRITICAL: Disk usage still above 95% ($DISK_USAGE%) after cleanup"
+              echo "   All Docker images are in use by active containers"
+              echo "   Attempting emergency cleanup: temporarily stopping monitoring services..."
+              
+              # Sauvegarder l'état actuel des conteneurs monitoring
+              MONITORING_CONTAINERS=$(docker ps --format "{{.Names}}" | grep -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | tr '\n' ' ' || true)
+              
+              if [ -n "$MONITORING_CONTAINERS" ]; then
+                echo "   Stopping monitoring containers temporarily: $MONITORING_CONTAINERS"
+                # Arrêter les services monitoring (les volumes seront préservés)
+                docker stop $MONITORING_CONTAINERS 2>/dev/null || true
+                sleep 2
+                
+                # Maintenant on peut supprimer les images (elles ne sont plus utilisées)
+                echo "   Removing unused images after stopping containers..."
+                docker image prune -af || true
+                
+                # Nettoyer les anciennes versions d'images (garder seulement les plus récentes)
+                echo "   Removing old image versions..."
+                docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | sort -V | head -n -7 | awk '{print $2}' | xargs -r docker rmi 2>/dev/null || true
+                
+                # Nettoyage système final
+                docker system prune -af || true
+                
+                # Vérifier l'espace libéré
+                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                echo "   Disk usage after emergency cleanup: ${DISK_USAGE}%"
+                
+                # Redémarrer les services monitoring (sera fait plus tard dans le script)
+                echo "   Monitoring services will be restarted after image pull"
+              else
+                echo "   No monitoring containers found, performing final cleanup..."
+                docker image prune -af || true
+                docker system prune -af || true
+                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              fi
+              
+              # Si toujours plein, erreur critique
+              if [ "$DISK_USAGE" -gt 95 ]; then
+                echo "❌ ERROR: Disk usage is still above 95% ($DISK_USAGE%) after emergency cleanup"
+                echo "   The EBS volume is too small (6.8GB). Manual intervention required:"
+                echo ""
+                echo "   SOLUTION 1 (RECOMMANDÉ): Increase EBS volume size in AWS"
+                echo "   1. Go to AWS Console > EC2 > Volumes"
+                echo "   2. Select the volume attached to the monitoring instance"
+                echo "   3. Actions > Modify Volume > Increase to 20GB minimum"
+                echo "   4. SSH to the instance and run:"
+                echo "      sudo growpart /dev/xvda 1"
+                echo "      sudo resize2fs /dev/xvda1"
+                echo ""
+                echo "   SOLUTION 2 (TEMPORAIRE): Manual cleanup via SSH"
+                echo "   SSH to the server and run:"
+                echo "   docker system prune -af  # ⚠️ This will remove unused images"
+                echo ""
+                echo "   Current disk usage:"
+                df -h /
+                echo "   Docker disk usage:"
+                docker system df || true
+                exit 1
+              fi
             fi
             
             # Vérifier l'espace disque avant de pull les images
