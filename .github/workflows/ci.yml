@@ -840,7 +840,10 @@ jobs:
           # ⭐ Optimisation: Exclure les dossiers non pertinents pour améliorer la performance et réduire les warnings Maven
           # Note: skip-dirs est un paramètre valide de trivy-action@0.28.0 (liste séparée par virgules)
           # Trivy scanne automatiquement pom.xml et package.json, donc on peut exclure node_modules et target
+          # Note: Trivy peut quand même scanner node_modules pour package.json, mais skip-dirs réduit le bruit
           skip-dirs: 'node_modules,target,.git'
+          # Exclure aussi les fichiers non pertinents (réduit encore plus le bruit)
+          skip-files: '**/*.md,**/*.txt,**/*.log'
       
       # Afficher un résumé des résultats Trivy pour diagnostic
       - name: Trivy Scan Summary
