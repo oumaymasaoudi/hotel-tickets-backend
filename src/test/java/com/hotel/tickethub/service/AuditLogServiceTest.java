@@ -1,5 +1,6 @@
 package com.hotel.tickethub.service;
 
+import com.hotel.tickethub.dto.AuditLogRequest;
 import com.hotel.tickethub.model.AuditLog;
 import com.hotel.tickethub.model.Hotel;
 import com.hotel.tickethub.model.User;
@@ -61,9 +62,19 @@ class AuditLogServiceTest {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("key", "value");
         when(auditLogRepository.save(any(AuditLog.class))).thenReturn(auditLog);
+        AuditLogRequest request = AuditLogRequest.builder()
+                .user(user)
+                .action("TEST_ACTION")
+                .entityType("TestEntity")
+                .entityId(UUID.randomUUID())
+                .hotel(hotel)
+                .changes(metadata)
+                .description("Test description")
+                .ipAddress("127.0.0.1")
+                .build();
 
         // When
-        auditLogService.logAction(user, "TEST_ACTION", "TestEntity", UUID.randomUUID(), hotel, metadata, "Test description", "127.0.0.1");
+        auditLogService.logAction(request);
 
         // Then
         verify(auditLogRepository, times(1)).save(any(AuditLog.class));
@@ -73,9 +84,19 @@ class AuditLogServiceTest {
     void testLogAction_WithNullMetadata() {
         // Given
         when(auditLogRepository.save(any(AuditLog.class))).thenReturn(auditLog);
+        AuditLogRequest request = AuditLogRequest.builder()
+                .user(user)
+                .action("TEST_ACTION")
+                .entityType("TestEntity")
+                .entityId(UUID.randomUUID())
+                .hotel(hotel)
+                .changes(null)
+                .description("Test description")
+                .ipAddress(null)
+                .build();
 
         // When
-        auditLogService.logAction(user, "TEST_ACTION", "TestEntity", UUID.randomUUID(), hotel, null, "Test description", null);
+        auditLogService.logAction(request);
 
         // Then
         verify(auditLogRepository, times(1)).save(any(AuditLog.class));

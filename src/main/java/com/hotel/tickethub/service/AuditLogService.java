@@ -67,9 +67,9 @@ public class AuditLogService {
      * @param changes Changements effectués (JSON)
      * @param description Description textuelle
      * @param ipAddress Adresse IP
-     * @deprecated Utiliser logAction(AuditLogRequest) à la place
+     * @deprecated Utiliser logAction(AuditLogRequest) à la place. Sera supprimé dans la version 2.0.0.
      */
-    @Deprecated
+    @Deprecated(since = "1.0.0", forRemoval = true)
     public AuditLog logAction(
             User user,
             String action,

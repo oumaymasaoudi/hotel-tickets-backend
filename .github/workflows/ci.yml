@@ -766,7 +766,8 @@ jobs:
     name: Backend - Deploy to Staging
     runs-on: ubuntu-latest
     needs: [docker-build]
-    # ⭐ AMÉLIORATION TOP 5: Staging uniquement sur develop (pas sur main)
+    # ⭐ Meilleure pratique : Staging uniquement sur develop (environnement de test)
+    # Main est pour la production (ou validation finale sur staging si nécessaire)
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment: staging
     timeout-minutes: 15
@@ -1259,7 +1260,8 @@ jobs:
     name: Backend - Deploy Monitoring Stack
     runs-on: ubuntu-latest
     needs: [deploy-staging]
-    # ⭐ AMÉLIORATION: Monitoring uniquement sur develop (staging)
+    # ⭐ Meilleure pratique : Monitoring uniquement sur develop (avec staging)
+    # Le monitoring surveille l'environnement staging
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment: monitoring
     timeout-minutes: 15

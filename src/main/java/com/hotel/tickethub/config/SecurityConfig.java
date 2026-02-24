@@ -58,6 +58,7 @@ public class SecurityConfig {
 
                                 // Security headers
                                 .headers(headers -> headers
+                                                // Note: FrameOptionsConfig::deny n'est pas disponible dans cette version de Spring Security
                                                 .frameOptions(frameOptions -> frameOptions.deny())
                                                 .contentTypeOptions(contentTypeOptions -> {
                                                 })

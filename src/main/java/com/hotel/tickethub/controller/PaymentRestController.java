@@ -1,5 +1,6 @@
 package com.hotel.tickethub.controller;
 
+import com.hotel.tickethub.dto.AuditLogRequest;
 import com.hotel.tickethub.dto.PaymentRequest;
 import com.hotel.tickethub.dto.PaymentResponse;
 import com.hotel.tickethub.model.Payment;
@@ -139,16 +140,17 @@ public class PaymentRestController {
 
         // Log l'action
         User user = (User) authentication.getPrincipal(); // À adapter selon implémentation
-        auditLogService.logAction(
-            user,
-            AuditLogService.ActionType.CREATE_PAYMENT,
-            AuditLogService.EntityType.PAYMENT,
-            created.getId(),
-            created.getHotel(),
-            request,
-            "Nouveau paiement enregistré",
-            getClientIp()
-        );
+        AuditLogRequest auditRequest = AuditLogRequest.builder()
+                .user(user)
+                .action(AuditLogService.ActionType.CREATE_PAYMENT)
+                .entityType(AuditLogService.EntityType.PAYMENT)
+                .entityId(created.getId())
+                .hotel(created.getHotel())
+                .changes(request)
+                .description("Nouveau paiement enregistré")
+                .ipAddress(getClientIp())
+                .build();
+        auditLogService.logAction(auditRequest);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(toPaymentResponse(created));
     }
