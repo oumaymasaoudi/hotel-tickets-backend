@@ -789,7 +789,15 @@ jobs:
           echo "Trivy Vulnerability Scan (Table Format - Diagnostic)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           # Utiliser exit-code 0 pour voir les résultats même s'il y a des vulnérabilités
-          trivy fs . --severity CRITICAL,HIGH --format table --scanners vuln --exit-code 0 || echo "⚠️  Trivy table scan completed with warnings"
+          # Note: --skip-dirs pour éviter de scanner node_modules et autres dossiers non pertinents
+          # --skip-files pour éviter les fichiers de configuration non critiques
+          trivy fs . \
+            --severity CRITICAL,HIGH \
+            --format table \
+            --scanners vuln \
+            --exit-code 0 \
+            --skip-dirs node_modules,target,.git \
+            --skip-files "**/*.md,**/*.txt" || echo "⚠️  Trivy table scan completed with warnings"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ⭐ Cache Trivy DB pour améliorer la fiabilité (évite rate-limits et téléchargements répétés)
@@ -825,10 +833,13 @@ jobs:
           # C'est pourquoi continue-on-error est nécessaire pour permettre au job de continuer
           exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
-          # Sur develop: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
+          # Sur develop/feature: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
           # Scanner uniquement les vulnérabilités (pas les secrets pour éviter les faux positifs)
           scanners: 'vuln'
+          # ⭐ Optimisation: Exclure les dossiers non pertinents pour améliorer la performance et réduire les faux positifs
+          # Note: Trivy scanne automatiquement pom.xml et package.json, donc on peut exclure node_modules et target
+          skip-dirs: 'node_modules,target,.git'
       
       # Afficher un résumé des résultats Trivy pour diagnostic
       - name: Trivy Scan Summary
