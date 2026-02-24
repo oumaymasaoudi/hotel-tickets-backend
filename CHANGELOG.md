@@ -1,3 +1,10 @@
+## [1.13.7](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.6...v1.13.7) (2026-02-24)
+
+
+### Bug Fixes
+
+* Correct PR conditions for main/develop branches - Use github.base_ref for PRs, fix Trivy blocking on main, simplify SonarCloud config ([9cdf2a3](https://github.com/oumaymasaoudi/hotel-tickets-backend/commit/9cdf2a30495ed6fd653bf757b8ec53c8a62f55ee))
+
 ## [1.13.6](https://github.com/oumaymasaoudi/hotel-tickets-backend/compare/v1.13.5...v1.13.6) (2026-02-24)
 
 
