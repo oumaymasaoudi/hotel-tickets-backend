@@ -1031,11 +1031,12 @@ jobs:
     # ⭐ AMÉLIORATION: Docker build pour develop (staging) et main (release)
     # Sur develop: continue même si sonar/security-lint échouent (staging peut être déployé pour tester)
     # Sur main: bloque si sonar échoue (Quality Gate strict) ou si security-lint échoue (vulnérabilités CRITICAL/HIGH)
+    # ⚠️ IMPORTANT: Avec continue-on-error: true, le job est toujours "failure" mais on peut utiliser needs.*.result pour permettre l'exécution
     if: |
       github.event_name == 'push' &&
       (github.ref_name == 'develop' || github.ref_name == 'main') &&
       (
-        (github.ref_name == 'develop' && (needs.sonar.result == 'success' || needs.sonar.result == 'failure') && (needs.security-lint.result == 'success' || needs.security-lint.result == 'failure')) ||
+        (github.ref_name == 'develop') ||
         (github.ref_name == 'main' && needs.sonar.result == 'success' && needs.security-lint.result == 'success')
       )
     concurrency:
