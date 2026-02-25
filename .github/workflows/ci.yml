@@ -2364,8 +2364,9 @@ jobs:
   pipeline-success:
     name: Pipeline Success
     runs-on: ubuntu-latest
-    # ⭐ Ne dépendre que des jobs critiques (test, build) pour garantir l'exécution même si security-lint échoue
-    needs: [lint, test, coverage, build, dependency-check, sonar]
+    # ⭐ Dépendre de tous les jobs, y compris security-lint, pour garantir l'ordre d'exécution
+    # Avec if: always(), le job s'exécute même si security-lint échoue (continue-on-error)
+    needs: [lint, test, coverage, build, dependency-check, security-lint, sonar]
     # ⭐ S'exécuter toujours, même si security-lint échoue (continue-on-error)
     if: always()
     steps:
