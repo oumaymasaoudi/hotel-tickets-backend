@@ -879,6 +879,8 @@ jobs:
         # Sur develop/feature: permissif - warning seulement, pipeline continue
         # ⚠️ IMPORTANT: continue-on-error permet au job de passer même si Trivy retourne exit code 1
         # Le step sera marqué "failed" (rouge) mais le job sera "success" (vert) pour les dépendances
+        # ⚠️ NOTE: "Error: Process completed with exit code 1" est NORMAL quand Trivy trouve des vulnérabilités.
+        # Avec continue-on-error: true, le pipeline continue et passe (vert) même si le step est rouge.
         continue-on-error: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') || (github.event_name == 'push' && github.ref_name != 'main') }}
         env:
           TRIVY_CACHE_DIR: ~/.cache/trivy
