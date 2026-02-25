@@ -1025,16 +1025,19 @@ jobs:
     name: Backend - Docker Build & Push
     runs-on: ubuntu-latest
     # ⭐ AMÉLIORATION BONUS: Docker build attend security checks + SonarCloud Quality Gate (DevSecOps strict)
-    # Sur main : pas d'image si Sonar Quality Gate KO
-    # ⚠️ IMPORTANT: Utiliser needs.sonar.result pour permettre l'exécution même si sonar échoue sur develop
+    # Sur main : pas d'image si Sonar Quality Gate KO ou si security-lint échoue
+    # ⚠️ IMPORTANT: Utiliser needs.sonar.result et needs.security-lint.result pour permettre l'exécution même si ces jobs échouent sur develop
     needs: [build, dependency-check, security-lint, sonar]
     # ⭐ AMÉLIORATION: Docker build pour develop (staging) et main (release)
-    # Sur develop: continue même si sonar échoue (staging peut être déployé pour tester)
-    # Sur main: bloque si sonar échoue (Quality Gate strict)
+    # Sur develop: continue même si sonar/security-lint échouent (staging peut être déployé pour tester)
+    # Sur main: bloque si sonar échoue (Quality Gate strict) ou si security-lint échoue (vulnérabilités CRITICAL/HIGH)
     if: |
       github.event_name == 'push' &&
       (github.ref_name == 'develop' || github.ref_name == 'main') &&
-      (github.ref_name != 'main' || needs.sonar.result == 'success')
+      (
+        (github.ref_name == 'develop' && (needs.sonar.result == 'success' || needs.sonar.result == 'failure') && (needs.security-lint.result == 'success' || needs.security-lint.result == 'failure')) ||
+        (github.ref_name == 'main' && needs.sonar.result == 'success' && needs.security-lint.result == 'success')
+      )
     concurrency:
       group: docker-build-backend-${{ github.ref_name }}
       cancel-in-progress: false
