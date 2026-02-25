@@ -824,32 +824,46 @@ jobs:
         uses: aquasecurity/setup-trivy@v0.2.1
         continue-on-error: true
 
-      # Exécuter Trivy en mode table pour afficher les vulnérabilités (diagnostic)
-      - name: Run Trivy vulnerability scanner (table format for diagnostics)
-        id: trivy-table
+      # ⭐ DEBUG: Afficher les vulnérabilités en table format pour diagnostic immédiat
+      # Ce step ne bloque jamais (exit-code 0) pour qu'on puisse voir les résultats même si des vulnérabilités sont trouvées
+      - name: Trivy SBOM (table output for debugging)
+        id: trivy-sbom-table
+        if: steps.generate-sbom.outputs.sbom_exists == 'true'
         continue-on-error: true
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Trivy Vulnerability Scan (Table Format - Diagnostic)"
+          echo "🔍 Trivy SBOM Scan - Table Format (Debugging)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          # Utiliser le SBOM si disponible, sinon fallback sur filesystem
-          if [ "${{ steps.generate-sbom.outputs.sbom_exists }}" == "true" ]; then
-            echo "📦 Scanning SBOM: ${{ steps.generate-sbom.outputs.sbom_path }}"
-            trivy sbom "${{ steps.generate-sbom.outputs.sbom_path }}" \
+          echo "📦 Scanning SBOM: ${{ steps.generate-sbom.outputs.sbom_path }}"
+          echo ""
+          trivy sbom "${{ steps.generate-sbom.outputs.sbom_path }}" \
+            --severity CRITICAL,HIGH \
+            --format table \
+            --scanners vuln \
+            --exit-code 0
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # ⭐ DEBUG: Scanner aussi les JARs pour comparaison (optionnel mais utile)
+      - name: Trivy scan JAR (table output for debugging)
+        id: trivy-jar-table
+        continue-on-error: true
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔍 Trivy JAR Scan - Table Format (Debugging)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [ -d "target" ] && [ -n "$(find target -name '*.jar' -type f 2>/dev/null)" ]; then
+            echo "📦 Scanning JAR files in target/"
+            echo ""
+            trivy fs target/*.jar \
               --severity CRITICAL,HIGH \
-              --format table \
               --scanners vuln \
-              --exit-code 0 || echo "⚠️  Trivy SBOM scan completed with warnings"
+              --format table \
+              --exit-code 0 || echo "⚠️  No JAR files found or scan completed with warnings"
           else
-            echo "📁 Fallback: Scanning filesystem"
-            trivy fs . \
-              --severity CRITICAL,HIGH \
-              --format table \
-              --scanners vuln \
-              --exit-code 0 \
-              --skip-dirs node_modules,target,.git \
-              --skip-files "**/*.md,**/*.txt" || echo "⚠️  Trivy table scan completed with warnings"
+            echo "⚠️  No JAR files found in target/ directory"
           fi
+          echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ⭐ Cache Trivy DB pour améliorer la fiabilité (évite rate-limits et téléchargements répétés)
