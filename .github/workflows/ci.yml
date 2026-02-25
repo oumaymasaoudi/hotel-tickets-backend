@@ -870,7 +870,11 @@ jobs:
       # Note: Les warnings "Unsupported hash algorithm" (SHA-512, SHA-384, SHA3-*) sont normaux.
       # CycloneDX génère plusieurs types de hashes, mais Trivy ne supporte que MD5, SHA-1, SHA-256.
       # Ces warnings n'empêchent pas le scan de fonctionner et peuvent être ignorés.
-      - name: Run Trivy vulnerability scanner (SBOM)
+      # ⭐ Trivy SBOM Scan (SARIF pour GitHub Security)
+      # ⚠️ IMPORTANT: Avec scan-type: 'sbom' + scanners: 'vuln', Trivy scanne uniquement le SBOM
+      # Le scan "jar" visible dans les logs est normal : Trivy analyse les composants du SBOM qui sont des JARs
+      # Ce n'est pas un scan filesystem supplémentaire, c'est l'analyse des dépendances listées dans le SBOM
+      - name: Run Trivy vulnerability scanner (SBOM - SARIF)
         id: trivy-scan
         if: steps.generate-sbom.outputs.sbom_exists == 'true'
         uses: aquasecurity/trivy-action@0.28.0
@@ -890,6 +894,8 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          # ⭐ FORCER: Scanner uniquement les vulnérabilités (pas secret/config) pour éviter les scans annexes
+          scanners: 'vuln'
           # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop et branches feature (gère PR correctement)
           # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop/feature: permissif (exit-code=0) - warning seulement, ne bloque pas le pipeline
@@ -899,8 +905,6 @@ jobs:
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop/feature: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
-          # Scanner uniquement les vulnérabilités (pas les secrets pour éviter les faux positifs)
-          scanners: 'vuln'
 
       # ⭐ FALLBACK: Si le SBOM n'a pas pu être généré, utiliser le scan filesystem
       - name: Run Trivy vulnerability scanner (Filesystem fallback)
