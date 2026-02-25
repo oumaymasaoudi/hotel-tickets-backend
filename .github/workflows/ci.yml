@@ -2368,6 +2368,7 @@ jobs:
     if: always()
     steps:
       - name: Pipeline Status Summary
+        id: pipeline-status
         run: |
           echo "## ✅ Pipeline Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -2383,7 +2384,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # ⭐ Sur PRs vers develop/feature, le pipeline passe même si security-lint échoue (continue-on-error)
+          IS_PR_NON_MAIN=false
           if [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.base_ref }}" != "main" ]; then
+            IS_PR_NON_MAIN=true
             echo "ℹ️ **Note**: Sur les PRs vers develop/feature, le pipeline passe même si Trivy trouve des vulnérabilités (non-bloquant)." >> $GITHUB_STEP_SUMMARY
             echo "Les vulnérabilités sont visibles dans l'onglet Security de GitHub." >> $GITHUB_STEP_SUMMARY
           fi
@@ -2394,4 +2397,12 @@ jobs:
             exit 1
           fi
           
+          # ⭐ Sur PRs vers develop/feature, le pipeline passe même si Trivy échoue
+          # Sur main, Trivy doit réussir (bloquant)
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref_name }}" == "main" ] && [ "${{ needs.security-lint.result }}" != "success" ]; then
+            echo "❌ **Pipeline Failed**: Trivy a échoué sur main (bloquant)" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
           echo "✅ **Pipeline Success**: Tous les jobs critiques ont réussi" >> $GITHUB_STEP_SUMMARY
+          echo "pipeline_status=success" >> $GITHUB_OUTPUT
