@@ -2382,13 +2382,8 @@ jobs:
           echo "| Coverage | ${{ needs.coverage.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| OWASP | ${{ needs.dependency-check.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.security-lint.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| SonarCloud | ${{ needs.sonar.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # ⭐ Vérifier le statut de security-lint (peut être skipped si le job n'a pas été exécuté)
-          # Note: security-lint n'est pas dans needs, donc on ne peut pas accéder à son résultat directement
-          # Mais avec continue-on-error: true, le job est marqué comme "success" pour les dépendances
-          echo "| Trivy | ⚠️ (non-bloquant sur PRs vers develop/feature) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # ⭐ Sur PRs vers develop/feature, le pipeline passe même si security-lint échoue (continue-on-error)
