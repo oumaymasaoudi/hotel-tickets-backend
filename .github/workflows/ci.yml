@@ -2420,9 +2420,21 @@ jobs:
             echo "Les vulnérabilités sont visibles dans l'onglet Security de GitHub." >> $GITHUB_STEP_SUMMARY
           fi
           
+          # ⭐ Sur push vers develop/feature, le pipeline passe même si security-lint échoue (continue-on-error)
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref_name }}" != "main" ]; then
+            echo "ℹ️ **Note**: Sur develop/feature, le pipeline passe même si Trivy trouve des vulnérabilités (non-bloquant)." >> $GITHUB_STEP_SUMMARY
+            echo "Les vulnérabilités sont visibles dans l'onglet Security de GitHub." >> $GITHUB_STEP_SUMMARY
+          fi
+          
           # Vérifier que les jobs critiques ont réussi
           if [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.build.result }}" != "success" ]; then
             echo "❌ **Pipeline Failed**: Tests ou Build ont échoué" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          # ⭐ Sur main, Trivy doit réussir (bloquant)
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref_name }}" == "main" ] && [ "${{ needs.security-lint.result }}" != "success" ]; then
+            echo "❌ **Pipeline Failed**: Trivy a échoué sur main (bloquant)" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
           
