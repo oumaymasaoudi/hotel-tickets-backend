@@ -788,6 +788,8 @@ jobs:
       # - Résout correctement les versions Maven (plus de warning "Dependency version cannot be determined")
       # - Inclut toutes les dépendances transitives avec leurs versions exactes
       # - Scan plus rapide et plus précis que le scan filesystem du pom.xml
+      # Note: Les warnings "Unsupported hash algorithm" sont normaux (CycloneDX génère plusieurs hashes,
+      # Trivy ne supporte que MD5, SHA-1, SHA-256). Ces warnings n'empêchent pas le scan de fonctionner.
       - name: Generate SBOM (CycloneDX)
         id: generate-sbom
         run: |
@@ -795,7 +797,8 @@ jobs:
           echo "Generating CycloneDX SBOM for Trivy scan"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           # Générer le SBOM avec le plugin CycloneDX Maven (sans exécuter les tests)
-          mvn -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.8.2:makeAggregateBom
+          # Format JSON pour meilleure compatibilité avec Trivy
+          mvn -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.8.2:makeAggregateBom -Dcyclonedx.outputFormat=json
           
           # Vérifier que le SBOM a été généré
           if [ -f "target/bom.json" ]; then
@@ -803,11 +806,13 @@ jobs:
             ls -lh target/bom.json
             echo "sbom_path=target/bom.json" >> $GITHUB_OUTPUT
             echo "sbom_exists=true" >> $GITHUB_OUTPUT
+            echo "ℹ️  Note: Warnings about 'Unsupported hash algorithm' are normal and don't affect the scan"
           elif [ -f "target/bom.xml" ]; then
             echo "✓ SBOM generated successfully: target/bom.xml"
             ls -lh target/bom.xml
             echo "sbom_path=target/bom.xml" >> $GITHUB_OUTPUT
             echo "sbom_exists=true" >> $GITHUB_OUTPUT
+            echo "ℹ️  Note: Warnings about 'Unsupported hash algorithm' are normal and don't affect the scan"
           else
             echo "⚠️  SBOM not found, falling back to filesystem scan"
             echo "sbom_exists=false" >> $GITHUB_OUTPUT
@@ -862,6 +867,9 @@ jobs:
       # - Plus de warning "Dependency version cannot be determined"
       # - Versions résolues correctement (inclut les dépendances transitives)
       # - Scan plus rapide et plus précis
+      # Note: Les warnings "Unsupported hash algorithm" (SHA-512, SHA-384, SHA3-*) sont normaux.
+      # CycloneDX génère plusieurs types de hashes, mais Trivy ne supporte que MD5, SHA-1, SHA-256.
+      # Ces warnings n'empêchent pas le scan de fonctionner et peuvent être ignorés.
       - name: Run Trivy vulnerability scanner (SBOM)
         id: trivy-scan
         if: steps.generate-sbom.outputs.sbom_exists == 'true'
