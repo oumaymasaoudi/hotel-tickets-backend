@@ -941,10 +941,9 @@ jobs:
           # ⭐ AMÉLIORATION: Bloquer sur main, permissif sur develop et branches feature (gère PR correctement)
           # Sur main: strict (exit-code=1) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop/feature: permissif (exit-code=0) - warning seulement, ne bloque pas le pipeline
-          # ⚠️ IMPORTANT: exit-code='0' garantit que Trivy ne retourne pas exit code 1 même si des vulnérabilités sont trouvées
-          # ⚠️ FIX: Utiliser trivy-args pour forcer --exit-code 0 sur develop/feature car trivy-action peut ignorer exit-code dans certains cas
+          # ⚠️ IMPORTANT: exit-code='0' devrait empêcher Trivy de retourner exit code 1, mais si cela ne fonctionne pas,
+          # continue-on-error: true au niveau du step garantit que le pipeline continue même si Trivy retourne exit code 1
           exit-code: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '1' || '0' }}
-          trivy-args: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref_name == 'main') && '' || '--exit-code 0' }}
           # Sur main: strict (ignore-unfixed=false) - toutes les vulnérabilités CRITICAL/HIGH bloquent
           # Sur develop/feature: tolérant (ignore-unfixed=true) - ignore les vulnérabilités sans correctif (réduit le bruit)
           ignore-unfixed: ${{ github.event_name == 'pull_request' && github.base_ref != 'main' || github.event_name == 'push' && github.ref_name != 'main' }}
