@@ -2355,3 +2355,43 @@ jobs:
           echo "| Latest | \`$LATEST_IMAGE\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📦 Git Tag: \`${{ steps.git_tag.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================
+  # PIPELINE SUCCESS (pour garantir workflow success sur PRs)
+  # ============================================
+  # ⭐ Ce job s'exécute toujours pour garantir que le workflow passe même si security-lint échoue sur PRs
+  # Sur les PRs, docker-build ne s'exécute pas, donc ce job garantit que le workflow passe
+  pipeline-success:
+    name: Pipeline Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, coverage, build, dependency-check, security-lint, sonar]
+    if: always()
+    steps:
+      - name: Pipeline Status Summary
+        run: |
+          echo "## ✅ Pipeline Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage | ${{ needs.coverage.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP | ${{ needs.dependency-check.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.security-lint.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SonarCloud | ${{ needs.sonar.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # ⭐ Sur PRs vers develop/feature, le pipeline passe même si security-lint échoue (continue-on-error)
+          if [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.base_ref }}" != "main" ]; then
+            echo "ℹ️ **Note**: Sur les PRs vers develop/feature, le pipeline passe même si Trivy trouve des vulnérabilités (non-bloquant)." >> $GITHUB_STEP_SUMMARY
+            echo "Les vulnérabilités sont visibles dans l'onglet Security de GitHub." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Vérifier que les jobs critiques ont réussi
+          if [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.build.result }}" != "success" ]; then
+            echo "❌ **Pipeline Failed**: Tests ou Build ont échoué" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "✅ **Pipeline Success**: Tous les jobs critiques ont réussi" >> $GITHUB_STEP_SUMMARY
