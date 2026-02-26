@@ -105,7 +105,7 @@ jobs:
           JAVA_TOOL_OPTIONS: '-Duser.language=en -Duser.country=US'
       
       - name: Upload SpotBugs report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: spotbugs-report
@@ -115,7 +115,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload Checkstyle report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: checkstyle-report
@@ -161,7 +161,7 @@ jobs:
         continue-on-error: false
       
       - name: Upload test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-reports
@@ -169,7 +169,7 @@ jobs:
           retention-days: 7
       
       - name: Upload JaCoCo Report (for Sonar)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jacoco-report
@@ -191,7 +191,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Download JaCoCo Report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: jacoco-report
           path: target/site/jacoco
@@ -261,7 +261,7 @@ jobs:
         # continue-on-error géré par la logique interne du script (fail sur main, warn sur develop)
       
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./target/site/jacoco/jacoco.xml
           flags: backend
@@ -323,7 +323,7 @@ jobs:
           fi
       
       - name: Upload JAR artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jar
           path: artifacts/*.jar
@@ -355,7 +355,7 @@ jobs:
       
       # ⭐ AMÉLIORATION TOP 1: Réutiliser jacoco.xml du job test/coverage au lieu de refaire les tests
       - name: Download JaCoCo Report from test job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: jacoco-report
           path: target/site/jacoco
@@ -574,7 +574,7 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Upload Dependency Check results (HTML)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-check-report
@@ -625,7 +625,7 @@ jobs:
 
       # Installer Trivy pour l'étape de diagnostic
       - name: Setup Trivy for diagnostics
-        uses: aquasecurity/setup-trivy@v0.2.1
+        uses: aquasecurity/setup-trivy@v0.2.5
         continue-on-error: true
 
       # Exécuter Trivy en mode table pour afficher les vulnérabilités (diagnostic)
@@ -646,7 +646,7 @@ jobs:
       #     Une fois les vulnérabilités identifiées et corrigées, remettre continue-on-error conditionnel
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         continue-on-error: true  # ⚠️  TEMPORAIRE: non-bloquant pour diagnostic
         with:
           scan-type: 'fs'
@@ -767,7 +767,7 @@ jobs:
             # latest sera poussé uniquement dans docker-tag-release après succès de release
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -936,7 +936,7 @@ jobs:
 
       - name: Prepare staging directory
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -976,7 +976,7 @@ jobs:
       
       - name: Verify docker-compose file copied
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -994,7 +994,7 @@ jobs:
 
       - name: Deploy to staging VM
         if: steps.ssh_test.outputs.ssh_ok == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USERNAME: ${{ github.actor }}
@@ -1339,7 +1339,7 @@ jobs:
           echo "SSH connection OK"
 
       - name: Prepare monitoring directory
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
@@ -1414,7 +1414,7 @@ jobs:
           fi
       
       - name: Verify monitoring files copied
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
@@ -1431,7 +1431,7 @@ jobs:
             fi
 
       - name: Deploy Monitoring Stack
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.MONITORING_HOST }}
           username: ${{ secrets.MONITORING_USER }}
