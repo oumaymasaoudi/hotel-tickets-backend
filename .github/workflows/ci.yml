@@ -1661,59 +1661,51 @@ jobs:
               exit 1
             fi
             
-echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
-# ⭐ AMÉLIORATION: Pull les images une par une pour mieux gérer l'espace
-# Cela permet de vérifier l'espace après chaque pull et de nettoyer si nécessaire
-IMAGES_TO_PULL=(
-  "prom/node-exporter:latest"
-  "gcr.io/cadvisor/cadvisor:latest"
-  "prom/alertmanager:latest"
-  "prom/prometheus:latest"
-  "grafana/grafana:latest"
-)
-
-for IMAGE in "${IMAGES_TO_PULL[@]}"; do
-  echo "Pulling $IMAGE..."
-  docker pull "$IMAGE" || {
-    echo "⚠️  Failed to pull $IMAGE, checking disk space..."
-    DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-    echo "Current disk usage: ${DISK_USAGE}%"
-    
-    if [ "$DISK_USAGE" -gt 90 ]; then
-      echo "⚠️  Disk usage high, performing emergency cleanup..."
-      # Nettoyer les images non utilisées
-      docker image prune -af || true
-      # Nettoyer les volumes non utilisés (sauf monitoring)
-      docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true
-      DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-      echo "Disk usage after cleanup: ${DISK_USAGE}%"
-      
-      if [ "$DISK_USAGE" -gt 92 ]; then
-        echo "❌ ERROR: Disk usage still too high (${DISK_USAGE}%) to pull $IMAGE"
-        echo "   Please increase EBS volume size to at least 20GB"
-        exit 1
-      fi
-    fi
-    
-    # Réessayer le pull
-    echo "Retrying pull of $IMAGE..."
-    docker pull "$IMAGE" || {
-      echo "❌ ERROR: Failed to pull $IMAGE after cleanup"
-      exit 1
-    }
-  }
-  
-  # Vérifier l'espace après chaque pull
-  DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-  echo "✓ Pulled $IMAGE successfully (disk usage: ${DISK_USAGE}%)"
-  
-  if [ "$DISK_USAGE" -gt 90 ]; then
-    echo "⚠️  Disk usage high after pulling $IMAGE, cleaning up before next pull..."
-    docker image prune -f || true
-  fi
-done
-
-echo "✓ All images pulled successfully"
+            echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
+            # ⭐ AMÉLIORATION: Pull les images une par une pour mieux gérer l'espace
+            # Cela permet de vérifier l'espace après chaque pull et de nettoyer si nécessaire
+            for IMAGE in "prom/node-exporter:latest" "gcr.io/cadvisor/cadvisor:latest" "prom/alertmanager:latest" "prom/prometheus:latest" "grafana/grafana:latest"; do
+              echo "Pulling $IMAGE..."
+              docker pull "$IMAGE" || {
+                echo "⚠️  Failed to pull $IMAGE, checking disk space..."
+                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                echo "Current disk usage: ${DISK_USAGE}%"
+                
+                if [ "$DISK_USAGE" -gt 90 ]; then
+                  echo "⚠️  Disk usage high, performing emergency cleanup..."
+                  # Nettoyer les images non utilisées
+                  docker image prune -af || true
+                  # Nettoyer les volumes non utilisés (sauf monitoring)
+                  docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true
+                  DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                  echo "Disk usage after cleanup: ${DISK_USAGE}%"
+                  
+                  if [ "$DISK_USAGE" -gt 92 ]; then
+                    echo "❌ ERROR: Disk usage still too high (${DISK_USAGE}%) to pull $IMAGE"
+                    echo "   Please increase EBS volume size to at least 20GB"
+                    exit 1
+                  fi
+                fi
+                
+                # Réessayer le pull
+                echo "Retrying pull of $IMAGE..."
+                docker pull "$IMAGE" || {
+                  echo "❌ ERROR: Failed to pull $IMAGE after cleanup"
+                  exit 1
+                }
+              }
+              
+              # Vérifier l'espace après chaque pull
+              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              echo "✓ Pulled $IMAGE successfully (disk usage: ${DISK_USAGE}%)"
+              
+              if [ "$DISK_USAGE" -gt 90 ]; then
+                echo "⚠️  Disk usage high after pulling $IMAGE, cleaning up before next pull..."
+                docker image prune -f || true
+              fi
+            done
+            
+            echo "✓ All images pulled successfully"
             
             echo "Starting monitoring stack..."
             # Démarrer avec gestion d'erreur pour le réseau
