@@ -1430,6 +1430,88 @@ jobs:
               ls -lh ${{ env.MONITORING_DIR }}/
             fi
 
+      - name: Copy deploy script to monitoring VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MONITORING_HOST }}
+          username: ${{ secrets.MONITORING_USER }}
+          key: ${{ secrets.MONITORING_SSH_PRIVATE_KEY }}
+          timeout: 30s
+          command_timeout: 10s
+          debug: false
+          use_insecure_cipher: false
+          script: |
+            cat > /tmp/deploy-monitoring.sh << 'DEPLOY_SCRIPT_EOF'
+            #!/bin/bash
+            set -euo pipefail
+            cd /opt/monitoring
+            echo "Checking and resizing filesystem if needed..."
+            df -h / | tail -1
+            REAL_DEVICE=$(findmnt -n -o SOURCE / | head -1)
+            [ -z "$REAL_DEVICE" ] || [ "$REAL_DEVICE" = "/dev/root" ] && REAL_DEVICE=$(lsblk -n -o NAME,MOUNTPOINT | grep -E '\s/$' | awk '{print "/dev/"$1}' | head -1)
+            [ -z "$REAL_DEVICE" ] || [ "$REAL_DEVICE" = "/dev/root" ] && for dev in /dev/xvda1 /dev/nvme0n1p1 /dev/sda1; do [ -b "$dev" ] && REAL_DEVICE="$dev" && break; done
+            if [ -n "$REAL_DEVICE" ] && [ "$REAL_DEVICE" != "/dev/root" ]; then
+              echo "Real block device: $REAL_DEVICE"
+              if echo "$REAL_DEVICE" | grep -q "nvme"; then
+                BLOCK_DEVICE=$(echo "$REAL_DEVICE" | sed 's/p[0-9]*$//')
+                PARTITION_NUM=$(echo "$REAL_DEVICE" | grep -o 'p[0-9]*$' | sed 's/p//')
+              else
+                BLOCK_DEVICE=$(echo "$REAL_DEVICE" | sed 's/[0-9]*$//')
+                PARTITION_NUM=$(echo "$REAL_DEVICE" | grep -o '[0-9]*$')
+              fi
+              [ -z "$PARTITION_NUM" ] && PARTITION_NUM="1"
+              if command -v growpart &> /dev/null; then
+                sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" || true
+                FSTYPE=$(findmnt -n -o FSTYPE / || echo "")
+                [ "$FSTYPE" = "xfs" ] && sudo xfs_growfs / || true
+                [ "$FSTYPE" != "xfs" ] && [ -n "$FSTYPE" ] && sudo resize2fs "$REAL_DEVICE" || true
+                [ -z "$FSTYPE" ] && (sudo xfs_growfs / 2>/dev/null || sudo resize2fs "$REAL_DEVICE" || true)
+                df -h / | tail -1
+              fi
+            fi
+            [ ! -f "docker-compose.monitoring.yml" ] || [ ! -f "prometheus/prometheus.yml" ] && (echo "ERROR: Required configuration files not found!" && exit 1)
+            df -h / | tail -1
+            DISK_USAGE_INITIAL=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            docker ps --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker stop 2>/dev/null || true
+            docker ps -a --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker rm 2>/dev/null || true
+            docker image prune -f || true
+            [ "$DISK_USAGE_INITIAL" -gt 90 ] && (docker image prune -af || true; docker builder prune -af || true; find /var/lib/docker/containers/ -type f -name "*.log" -delete 2>/dev/null || true; journalctl --vacuum-time=1h 2>/dev/null || true) || (docker image prune -af --filter "until=24h" || true; docker builder prune -af --filter "until=24h" || true; find /var/lib/docker/containers/ -type f -name "*.log" -mtime +1 -delete 2>/dev/null || true; journalctl --vacuum-time=1d 2>/dev/null || true)
+            docker network ls --format "{{.Name}}" | grep -v -E "(monitoring-network|bridge|host)" | xargs -r docker network rm 2>/dev/null || true
+            [ "$DISK_USAGE_INITIAL" -gt 90 ] && docker system prune -af || docker system prune -af --filter "until=24h" || true
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            [ "$DISK_USAGE" -gt 95 ] && (MONITORING_CONTAINERS=$(docker ps --format "{{.Names}}" | grep -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | tr '\n' ' ' || true); [ -n "$MONITORING_CONTAINERS" ] && (docker stop $MONITORING_CONTAINERS 2>/dev/null || true; sleep 2; docker image prune -af || true; docker system prune -af || true; DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')); [ "$DISK_USAGE" -gt 95 ] && (echo "❌ ERROR: Disk usage still above 95%" && exit 1))
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            [ "$DISK_USAGE" -gt 95 ] && (echo "ERROR: Disk usage too high, cannot pull images" && exit 1)
+            docker compose version || (docker-compose version || exit 1; COMPOSE_CMD="docker-compose")
+            COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
+            MONITORING_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(grafana|prometheus|alertmanager|node-exporter|cadvisor|promtail)" || true)
+            [ -n "$MONITORING_IMAGES" ] && echo "$MONITORING_IMAGES" | xargs -r docker rmi -f 2>/dev/null || true
+            docker image prune -f || true
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            [ "$DISK_USAGE" -gt 90 ] && (docker image prune -af || true; docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true; DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//'))
+            [ "$DISK_USAGE" -gt 92 ] && (echo "❌ ERROR: Disk usage too high to safely pull images" && exit 1)
+            for IMAGE in "prom/node-exporter:latest" "gcr.io/cadvisor/cadvisor:latest" "prom/alertmanager:latest" "prom/prometheus:latest" "grafana/grafana:latest"; do
+              echo "Pulling $IMAGE..."
+              docker pull "$IMAGE" || (DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//'); [ "$DISK_USAGE" -gt 90 ] && (docker image prune -af || true; docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true; DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//'); [ "$DISK_USAGE" -gt 92 ] && exit 1); docker pull "$IMAGE" || exit 1)
+              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              echo "✓ Pulled $IMAGE (disk: ${DISK_USAGE}%)"
+              [ "$DISK_USAGE" -gt 90 ] && docker image prune -f || true
+            done
+            set +e
+            $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never
+            COMPOSE_EXIT_CODE=$?
+            set -e
+            [ $COMPOSE_EXIT_CODE -ne 0 ] && (docker network ls | grep -q monitoring-network && (CONTAINER_IDS=$(docker ps --filter network=monitoring-network -q 2>/dev/null || true); [ -n "$CONTAINER_IDS" ] && (echo "$CONTAINER_IDS" | xargs docker stop 2>/dev/null || true; echo "$CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true); OLD_CONTAINER_IDS=$(docker ps -a --filter network=monitoring-network -q 2>/dev/null || true); [ -n "$OLD_CONTAINER_IDS" ] && echo "$OLD_CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true; docker network rm monitoring-network 2>/dev/null || docker network prune -f; sleep 3; $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never) || ($COMPOSE_CMD -f docker-compose.monitoring.yml logs && exit 1))
+            sleep 30
+            $COMPOSE_CMD -f docker-compose.monitoring.yml ps
+            docker ps | grep -q prometheus || ($COMPOSE_CMD -f docker-compose.monitoring.yml logs prometheus | tail -30 && exit 1)
+            GRAFANA_RUNNING=$(docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana && echo "yes" || echo "no")
+            [ "$GRAFANA_RUNNING" = "yes" ] && (GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}"); echo "$GRAFANA_STATUS" | grep -q "health: starting" && (sleep 30; GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}"); docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana || ($COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50 && exit 1))) || (docker ps -a | grep grafana || echo "No grafana container found"; $COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50; exit 1)
+            for service in alertmanager node-exporter cadvisor; do docker ps | grep -q "$service" || echo "WARNING: $service not running (non-critical)"; done
+            echo "Monitoring stack deployed successfully!"
+            DEPLOY_SCRIPT_EOF
+            chmod +x /tmp/deploy-monitoring.sh
+
       - name: Deploy Monitoring Stack
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -1441,499 +1523,8 @@ jobs:
           debug: false
           use_insecure_cipher: false
           script: |
-            set -euo pipefail
-            cd ${{ env.MONITORING_DIR }}
-            
-            # ⭐ CRITICAL: Resize filesystem if EBS volume was expanded
-            # This is necessary when the EBS volume size was increased but the filesystem wasn't resized
-            echo "Checking and resizing filesystem if needed..."
-            echo "Current disk usage:"
-            df -h / | tail -1
-            
-            # Find the real block device (df may show /dev/root which is a symlink)
-            # Use findmnt to get the actual source device
-            REAL_DEVICE=$(findmnt -n -o SOURCE / | head -1)
-            if [ -z "$REAL_DEVICE" ] || [ "$REAL_DEVICE" = "/dev/root" ]; then
-              # Fallback: use lsblk to find the root device
-              REAL_DEVICE=$(lsblk -n -o NAME,MOUNTPOINT | grep -E '\s/$' | awk '{print "/dev/"$1}' | head -1)
-            fi
-            
-            # If still not found, try common device names
-            if [ -z "$REAL_DEVICE" ] || [ "$REAL_DEVICE" = "/dev/root" ]; then
-              for dev in /dev/xvda1 /dev/nvme0n1p1 /dev/sda1; do
-                if [ -b "$dev" ]; then
-                  REAL_DEVICE="$dev"
-                  break
-                fi
-              done
-            fi
-            
-            if [ -z "$REAL_DEVICE" ] || [ "$REAL_DEVICE" = "/dev/root" ]; then
-              echo "⚠️  Could not determine real block device, skipping resize"
-              echo "   Available block devices:"
-              lsblk -o NAME,SIZE,TYPE,MOUNTPOINT || true
-            else
-              echo "Real block device: $REAL_DEVICE"
-              
-              # Detect block device and partition number
-              # For /dev/xvda1 -> BLOCK_DEVICE=/dev/xvda, PARTITION_NUM=1
-              # For /dev/nvme0n1p1 -> BLOCK_DEVICE=/dev/nvme0n1, PARTITION_NUM=1
-              if echo "$REAL_DEVICE" | grep -q "nvme"; then
-                # NVMe: /dev/nvme0n1p1 -> /dev/nvme0n1, partition 1
-                BLOCK_DEVICE=$(echo "$REAL_DEVICE" | sed 's/p[0-9]*$//')
-                PARTITION_NUM=$(echo "$REAL_DEVICE" | grep -o 'p[0-9]*$' | sed 's/p//')
-              else
-                # Standard: /dev/xvda1 -> /dev/xvda, partition 1
-                BLOCK_DEVICE=$(echo "$REAL_DEVICE" | sed 's/[0-9]*$//')
-                PARTITION_NUM=$(echo "$REAL_DEVICE" | grep -o '[0-9]*$')
-              fi
-              
-              # Default to partition 1 if not detected
-              if [ -z "$PARTITION_NUM" ]; then
-                PARTITION_NUM="1"
-              fi
-              
-              echo "Block device: $BLOCK_DEVICE"
-              echo "Partition number: $PARTITION_NUM"
-              
-              # Check if growpart is available
-              if command -v growpart &> /dev/null; then
-                # Get current volume size and partition size for comparison
-                VOLUME_SIZE=$(sudo blockdev --getsize64 "$BLOCK_DEVICE" 2>/dev/null || echo "0")
-                PARTITION_SIZE=$(sudo blockdev --getsize64 "$REAL_DEVICE" 2>/dev/null || echo "0")
-                echo "Volume size: $((VOLUME_SIZE / 1024 / 1024 / 1024))GB"
-                echo "Partition size: $((PARTITION_SIZE / 1024 / 1024 / 1024))GB"
-                
-                # If partition is smaller than volume, force resize
-                if [ "$PARTITION_SIZE" -lt "$VOLUME_SIZE" ] && [ "$VOLUME_SIZE" -gt 0 ] && [ "$PARTITION_SIZE" -gt 0 ]; then
-                  echo "⚠️  Partition ($((PARTITION_SIZE / 1024 / 1024 / 1024))GB) is smaller than volume ($((VOLUME_SIZE / 1024 / 1024 / 1024))GB), forcing partition resize..."
-                  # Force partition resize by specifying the end sector
-                  sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" -f || {
-                    echo "⚠️  growpart failed, trying alternative method..."
-                    # Alternative: use parted to resize
-                    sudo parted "$BLOCK_DEVICE" resizepart "$PARTITION_NUM" 100% || echo "⚠️  parted resize also failed"
-                  }
-                else
-                  echo "Resizing partition $BLOCK_DEVICE $PARTITION_NUM..."
-                  sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" || {
-                    echo "⚠️  growpart failed or partition already at max size (this is OK if volume wasn't expanded)"
-                  }
-                fi
-                
-                # Resize the filesystem
-                echo "Resizing filesystem on $REAL_DEVICE..."
-                # Detect filesystem type
-                FSTYPE=$(findmnt -n -o FSTYPE / || mount | grep "$REAL_DEVICE" | awk '{print $5}' || echo "")
-                echo "Filesystem type: ${FSTYPE:-unknown}"
-                
-                # Get current partition size and filesystem size for comparison
-                PARTITION_SIZE=$(sudo blockdev --getsize64 "$REAL_DEVICE" 2>/dev/null || echo "0")
-                echo "Partition size: $((PARTITION_SIZE / 1024 / 1024 / 1024))GB"
-                
-                if [ "$FSTYPE" = "xfs" ]; then
-                  echo "Using xfs_growfs for XFS filesystem..."
-                  sudo xfs_growfs / || echo "⚠️  xfs_growfs failed, continuing..."
-                elif [ -n "$FSTYPE" ]; then
-                  echo "Using resize2fs for $FSTYPE filesystem..."
-                  # Force resize even if resize2fs says nothing to do
-                  # This handles the case where partition was resized but filesystem wasn't
-                  sudo resize2fs -f "$REAL_DEVICE" 2>&1 || {
-                    echo "⚠️  resize2fs failed, trying without -f flag..."
-                    sudo resize2fs "$REAL_DEVICE" || echo "⚠️  resize2fs failed, continuing..."
-                  }
-                else
-                  # Try both methods if detection failed
-                  echo "Filesystem type unknown, trying xfs_growfs first..."
-                  sudo xfs_growfs / 2>/dev/null || {
-                    echo "xfs_growfs failed, trying resize2fs with force..."
-                    sudo resize2fs -f "$REAL_DEVICE" 2>&1 || {
-                      echo "resize2fs -f failed, trying without force..."
-                      sudo resize2fs "$REAL_DEVICE" || echo "⚠️  Both resize methods failed, continuing..."
-                    }
-                  }
-                fi
-                
-                echo "Disk usage after resize:"
-                df -h / | tail -1
-              else
-                echo "⚠️  growpart not available, skipping filesystem resize"
-                echo "   If EBS volume was expanded, resize manually:"
-                echo "   sudo growpart $BLOCK_DEVICE $PARTITION_NUM"
-                if [ "$FSTYPE" = "xfs" ]; then
-                  echo "   sudo xfs_growfs /"
-                else
-                  echo "   sudo resize2fs $REAL_DEVICE"
-                fi
-              fi
-            fi
-            
-            echo "Verifying configuration files..."
-            if [ ! -f "docker-compose.monitoring.yml" ]; then
-              echo "ERROR: docker-compose.monitoring.yml not found!"
-              exit 1
-            fi
-            if [ ! -f "prometheus/prometheus.yml" ]; then
-              echo "ERROR: prometheus/prometheus.yml not found!"
-              exit 1
-            fi
-            echo "Configuration files found"
-            
-            # OPTIMISATION: Utiliser --force-recreate au lieu de down complet
-            # Cela évite de supprimer les volumes et réseaux inutilement
-            echo "Updating monitoring services (force recreate if needed)..."
-            # --force-recreate recrée les conteneurs avec les nouvelles images
-            # --remove-orphans supprime les conteneurs orphelins
-            # Pas besoin de 'down' complet sauf en cas de problème majeur
-            
-            echo "Checking disk space..."
-            df -h / | tail -1
-            DISK_USAGE_INITIAL=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            
-            echo "Safe Docker disk space cleanup (preserving volumes)..."
-            
-            # ⭐ AMÉLIORATION: Nettoyage sécurisé sans supprimer les volumes (Grafana/Prometheus)
-            # Arrêter uniquement les conteneurs non critiques (pas ceux du monitoring)
-            echo "Stopping non-critical containers..."
-            docker ps --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker stop 2>/dev/null || true
-            
-            # Supprimer uniquement les conteneurs arrêtés non critiques
-            echo "Removing stopped non-critical containers..."
-            docker ps -a --format "{{.Names}}" | grep -v -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | xargs -r docker rm 2>/dev/null || true
-            
-            # Supprimer les images dangling (sans tag) - SÉCURISÉ
-            echo "Removing dangling images..."
-            docker image prune -f || true
-            
-            # Supprimer les images non utilisées (sans filtre de temps si disque plein)
-            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
-              echo "⚠️  Disk usage > 90%, performing aggressive cleanup..."
-              # Supprimer toutes les images non utilisées (pas seulement celles de +24h)
-              echo "Removing all unused images..."
-              docker image prune -af || true
-            else
-              echo "Removing unused images (older than 24h)..."
-              docker image prune -af --filter "until=24h" || true
-            fi
-            
-            # Nettoyer le build cache (plus agressif si disque plein)
-            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
-              echo "Cleaning all build cache..."
-              docker builder prune -af || true
-            else
-              echo "Cleaning build cache (older than 24h)..."
-              docker builder prune -af --filter "until=24h" || true
-            fi
-            
-            # Nettoyer les logs Docker (plus agressif si disque plein)
-            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
-              echo "Cleaning Docker logs (all logs, not just 1 day old)..."
-              find /var/lib/docker/containers/ -type f -name "*.log" -delete 2>/dev/null || true
-              # Limiter la taille des logs actuels
-              for container in $(docker ps --format "{{.Names}}"); do
-                docker logs --tail 100 "$container" > /dev/null 2>&1 || true
-              done
-              journalctl --vacuum-time=1h 2>/dev/null || true
-            else
-              echo "Cleaning Docker logs (older than 1 day)..."
-              find /var/lib/docker/containers/ -type f -name "*.log" -mtime +1 -delete 2>/dev/null || true
-              journalctl --vacuum-time=1d 2>/dev/null || true
-            fi
-            
-            # ⭐ AMÉLIORATION: Ne JAMAIS supprimer les volumes (risque de perte de données Grafana/Prometheus)
-            # docker volume prune est DANGEREUX - on ne le fait PAS
-            
-            # Nettoyer uniquement les réseaux non utilisés (pas ceux du monitoring)
-            echo "Removing unused networks (preserving monitoring-network)..."
-            docker network ls --format "{{.Name}}" | grep -v -E "(monitoring-network|bridge|host)" | xargs -r docker network rm 2>/dev/null || true
-            
-            # Nettoyage système sécurisé (SANS --volumes pour préserver les données)
-            if [ "$DISK_USAGE_INITIAL" -gt 90 ]; then
-              echo "Performing aggressive system prune (preserving volumes)..."
-              docker system prune -af || true
-            else
-              echo "Safe system prune (preserving volumes)..."
-              docker system prune -af --filter "until=24h" || true
-            fi
-            
-            # Vérifier l'espace utilisé par Docker
-            echo "Docker disk usage:"
-            docker system df || true
-            
-            echo "Disk space after cleanup:"
-            df -h / | tail -1
-            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            
-            # Si le disque est toujours plein après nettoyage agressif, arrêter temporairement les services monitoring
-            if [ "$DISK_USAGE" -gt 95 ]; then
-              echo "⚠️  CRITICAL: Disk usage still above 95% ($DISK_USAGE%) after cleanup"
-              echo "   All Docker images are in use by active containers"
-              echo "   Attempting emergency cleanup: temporarily stopping monitoring services..."
-              
-              # Sauvegarder l'état actuel des conteneurs monitoring
-              MONITORING_CONTAINERS=$(docker ps --format "{{.Names}}" | grep -E "(grafana|prometheus|loki|alertmanager|node-exporter|cadvisor|promtail)" | tr '\n' ' ' || true)
-              
-              if [ -n "$MONITORING_CONTAINERS" ]; then
-                echo "   Stopping monitoring containers temporarily: $MONITORING_CONTAINERS"
-                # Arrêter les services monitoring (les volumes seront préservés)
-                docker stop $MONITORING_CONTAINERS 2>/dev/null || true
-                sleep 2
-                
-                # Maintenant on peut supprimer les images (elles ne sont plus utilisées)
-                echo "   Removing unused images after stopping containers..."
-                docker image prune -af || true
-                
-                # Nettoyer les anciennes versions d'images (garder seulement les plus récentes)
-                echo "   Removing old image versions..."
-                docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | sort -V | head -n -7 | awk '{print $2}' | xargs -r docker rmi 2>/dev/null || true
-                
-                # Nettoyage système final
-                docker system prune -af || true
-                
-                # Vérifier l'espace libéré
-                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-                echo "   Disk usage after emergency cleanup: ${DISK_USAGE}%"
-                
-                # Redémarrer les services monitoring (sera fait plus tard dans le script)
-                echo "   Monitoring services will be restarted after image pull"
-              else
-                echo "   No monitoring containers found, performing final cleanup..."
-                docker image prune -af || true
-                docker system prune -af || true
-                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-              fi
-              
-              # Si toujours plein, erreur critique
-              if [ "$DISK_USAGE" -gt 95 ]; then
-                echo "❌ ERROR: Disk usage is still above 95% ($DISK_USAGE%) after emergency cleanup"
-                echo "   The EBS volume is too small (6.8GB). Manual intervention required:"
-                echo ""
-                echo "   SOLUTION 1 (RECOMMANDÉ): Increase EBS volume size in AWS"
-                echo "   1. Go to AWS Console > EC2 > Volumes"
-                echo "   2. Select the volume attached to the monitoring instance"
-                echo "   3. Actions > Modify Volume > Increase to 20GB minimum"
-                echo "   4. SSH to the instance and run:"
-                echo "      sudo growpart /dev/xvda 1"
-                echo "      sudo resize2fs /dev/xvda1"
-                echo ""
-                echo "   SOLUTION 2 (TEMPORAIRE): Manual cleanup via SSH"
-                echo "   SSH to the server and run:"
-                echo "   docker system prune -af  # ⚠️ This will remove unused images"
-                echo ""
-                echo "   Current disk usage:"
-                df -h /
-                echo "   Docker disk usage:"
-                docker system df || true
-                exit 1
-              fi
-            fi
-            
-            # Vérifier l'espace disque avant de pull les images
-            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            if [ "$DISK_USAGE" -gt 95 ]; then
-              echo "ERROR: Disk usage is still above 95% ($DISK_USAGE%), cannot pull images safely"
-              echo "Current disk usage:"
-              df -h /
-              echo "Docker disk usage:"
-              docker system df || true
-              exit 1
-            fi
-            
-            echo "Verifying Docker Compose version..."
-            docker compose version || {
-              echo "ERROR: docker compose (v2) not found. Checking docker-compose (v1)..."
-              docker-compose version || {
-                echo "ERROR: Neither docker compose nor docker-compose found"
-                exit 1
-              }
-              COMPOSE_CMD="docker-compose"
-            }
-            COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
-            
-            # ⭐ AMÉLIORATION: Supprimer les anciennes images AVANT de pull les nouvelles
-            # Cela libère de l'espace avant d'extraire les nouvelles images
-            echo "Removing old monitoring images before pulling new ones..."
-            MONITORING_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(grafana|prometheus|alertmanager|node-exporter|cadvisor|promtail)" || true)
-            if [ -n "$MONITORING_IMAGES" ]; then
-              echo "Found existing monitoring images, removing them to free space..."
-              echo "$MONITORING_IMAGES" | xargs -r docker rmi -f 2>/dev/null || true
-              # Nettoyer les images orphelines après suppression
-              docker image prune -f || true
-              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-              echo "Disk usage after removing old images: ${DISK_USAGE}%"
-            fi
-            
-            # Vérifier à nouveau l'espace avant pull
-            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            if [ "$DISK_USAGE" -gt 90 ]; then
-              echo "⚠️  WARNING: Disk usage still high (${DISK_USAGE}%), attempting additional cleanup..."
-              # Supprimer toutes les images non utilisées
-              docker image prune -af || true
-              # Nettoyer les volumes non utilisés (mais pas ceux du monitoring)
-              docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true
-              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-              echo "Disk usage after aggressive cleanup: ${DISK_USAGE}%"
-            fi
-            
-            # Si toujours trop plein, erreur
-            if [ "$DISK_USAGE" -gt 92 ]; then
-              echo "❌ ERROR: Disk usage too high (${DISK_USAGE}%) to safely pull images"
-              echo "   Minimum 8% free space required for image extraction"
-              echo "   Please increase EBS volume size or manually clean up"
-              df -h /
-              docker system df || true
-              exit 1
-            fi
-            
-            echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
-            # ⭐ AMÉLIORATION: Pull les images une par une pour mieux gérer l'espace
-            # Cela permet de vérifier l'espace après chaque pull et de nettoyer si nécessaire
-            for IMAGE in "prom/node-exporter:latest" "gcr.io/cadvisor/cadvisor:latest" "prom/alertmanager:latest" "prom/prometheus:latest" "grafana/grafana:latest"; do
-              echo "Pulling $IMAGE..."
-              docker pull "$IMAGE" || {
-                echo "⚠️  Failed to pull $IMAGE, checking disk space..."
-                DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-                echo "Current disk usage: ${DISK_USAGE}%"
-                
-                if [ "$DISK_USAGE" -gt 90 ]; then
-                  echo "⚠️  Disk usage high, performing emergency cleanup..."
-                  # Nettoyer les images non utilisées
-                  docker image prune -af || true
-                  # Nettoyer les volumes non utilisés (sauf monitoring)
-                  docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true
-                  DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-                  echo "Disk usage after cleanup: ${DISK_USAGE}%"
-                  
-                  if [ "$DISK_USAGE" -gt 92 ]; then
-                    echo "❌ ERROR: Disk usage still too high (${DISK_USAGE}%) to pull $IMAGE"
-                    echo "   Please increase EBS volume size to at least 20GB"
-                    exit 1
-                  fi
-                fi
-                
-                # Réessayer le pull
-                echo "Retrying pull of $IMAGE..."
-                docker pull "$IMAGE" || {
-                  echo "❌ ERROR: Failed to pull $IMAGE after cleanup"
-                  exit 1
-                }
-              }
-              
-              # Vérifier l'espace après chaque pull
-              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-              echo "✓ Pulled $IMAGE successfully (disk usage: ${DISK_USAGE}%)"
-              
-              if [ "$DISK_USAGE" -gt 90 ]; then
-                echo "⚠️  Disk usage high after pulling $IMAGE, cleaning up before next pull..."
-                docker image prune -f || true
-              fi
-            done
-            
-            echo "✓ All images pulled successfully"
-            
-            echo "Starting monitoring stack..."
-            # Démarrer avec gestion d'erreur pour le réseau
-            # ⭐ IMPORTANT: Utiliser --pull never pour éviter de re-pull les images déjà présentes
-            # Cela évite les problèmes d'espace disque lors du démarrage
-            set +e  # Ne pas arrêter sur les erreurs
-            $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never
-            COMPOSE_EXIT_CODE=$?
-            set -e  # Réactiver l'arrêt sur erreur
-            
-            if [ $COMPOSE_EXIT_CODE -ne 0 ]; then
-              echo "WARNING: Error detected, checking network..."
-              # Si l'erreur est liée au réseau, supprimer le réseau et réessayer
-              if docker network ls | grep -q monitoring-network; then
-                echo "Force removing problematic network..."
-                # Arrêter tous les conteneurs qui utilisent ce réseau
-                CONTAINER_IDS=$(docker ps --filter network=monitoring-network -q 2>/dev/null || true)
-                if [ -n "$CONTAINER_IDS" ]; then
-                  echo "$CONTAINER_IDS" | xargs docker stop 2>/dev/null || true
-                  echo "$CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
-                fi
-                OLD_CONTAINER_IDS=$(docker ps -a --filter network=monitoring-network -q 2>/dev/null || true)
-                if [ -n "$OLD_CONTAINER_IDS" ]; then
-                  echo "$OLD_CONTAINER_IDS" | xargs docker rm -f 2>/dev/null || true
-                fi
-                # Supprimer le réseau
-                docker network rm monitoring-network 2>/dev/null || docker network prune -f
-                sleep 3
-                echo "Retrying startup..."
-                $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never
-              else
-                echo "ERROR: Non-network related error, see logs"
-                $COMPOSE_CMD -f docker-compose.monitoring.yml logs
-                exit 1
-              fi
-            fi
-            
-            echo "Waiting for services to start (30s)..."
-            sleep 30
-            
-            echo "Container status:"
-            $COMPOSE_CMD -f docker-compose.monitoring.yml ps
-            
-            echo "Checking services..."
-            
-            # Vérifier que les conteneurs sont en cours d'exécution
-            echo "Verifying containers are running..."
-            
-            # Vérifier Prometheus
-            if docker ps | grep -q prometheus; then
-              PROMETHEUS_STATUS=$(docker ps --filter "name=prometheus" --format "{{.Status}}")
-              echo "Prometheus is running: $PROMETHEUS_STATUS"
-            else
-              echo "ERROR: Prometheus container is not running"
-              $COMPOSE_CMD -f docker-compose.monitoring.yml logs prometheus | tail -30
-              exit 1
-            fi
-            
-            # Vérifier Grafana (peut prendre plus de temps pour le health check)
-            GRAFANA_RUNNING=$(docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana && echo "yes" || echo "no")
-            
-            if [ "$GRAFANA_RUNNING" = "yes" ]; then
-              GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
-              echo "Grafana container found: $GRAFANA_STATUS"
-              
-              # Si Grafana est encore en "health: starting", attendre un peu plus
-              if echo "$GRAFANA_STATUS" | grep -q "health: starting"; then
-                echo "Grafana is still starting, waiting additional 30s..."
-                sleep 30
-                GRAFANA_STATUS=$(docker ps --filter "name=grafana" --format "{{.Status}}")
-                echo "Grafana status after wait: $GRAFANA_STATUS"
-                
-                # Vérifier à nouveau si Grafana est toujours en cours d'exécution
-                if ! docker ps --filter "name=grafana" --format "{{.Names}}" | grep -q grafana; then
-                  echo "ERROR: Grafana container stopped during startup"
-                  $COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50
-                  exit 1
-                fi
-              fi
-              
-              echo "Grafana is running successfully"
-            else
-              echo "ERROR: Grafana container is not running"
-              echo "Checking all containers:"
-              docker ps -a | grep grafana || echo "No grafana container found"
-              echo "Grafana logs:"
-              $COMPOSE_CMD -f docker-compose.monitoring.yml logs grafana | tail -50
-              exit 1
-            fi
-            
-            # Vérifier les autres services essentiels
-            for service in alertmanager node-exporter cadvisor; do
-              if docker ps | grep -q "$service"; then
-                SERVICE_STATUS=$(docker ps --filter "name=$service" --format "{{.Status}}")
-                echo "$service is running: $SERVICE_STATUS"
-              else
-                echo "WARNING: $service container is not running (non-critical)"
-              fi
-            done
-            
-            echo "Recent logs (last 10 lines):"
-            $COMPOSE_CMD -f docker-compose.monitoring.yml logs --tail=10
-            
-            echo "Monitoring stack deployed successfully!"
-            echo "Prometheus should now scrape the backend on ${{ secrets.STAGING_HOST }}:8081"
+            chmod +x /tmp/deploy-monitoring.sh
+            /tmp/deploy-monitoring.sh
 
       - name: Cleanup SSH
         if: always()
