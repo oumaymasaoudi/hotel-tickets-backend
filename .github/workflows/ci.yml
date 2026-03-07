@@ -1498,10 +1498,27 @@ jobs:
               
               # Check if growpart is available
               if command -v growpart &> /dev/null; then
-                echo "Resizing partition $BLOCK_DEVICE $PARTITION_NUM..."
-                sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" || {
-                  echo "⚠️  growpart failed or partition already at max size (this is OK if volume wasn't expanded)"
-                }
+                # Get current volume size and partition size for comparison
+                VOLUME_SIZE=$(sudo blockdev --getsize64 "$BLOCK_DEVICE" 2>/dev/null || echo "0")
+                PARTITION_SIZE=$(sudo blockdev --getsize64 "$REAL_DEVICE" 2>/dev/null || echo "0")
+                echo "Volume size: $((VOLUME_SIZE / 1024 / 1024 / 1024))GB"
+                echo "Partition size: $((PARTITION_SIZE / 1024 / 1024 / 1024))GB"
+                
+                # If partition is smaller than volume, force resize
+                if [ "$PARTITION_SIZE" -lt "$VOLUME_SIZE" ] && [ "$VOLUME_SIZE" -gt 0 ] && [ "$PARTITION_SIZE" -gt 0 ]; then
+                  echo "⚠️  Partition ($((PARTITION_SIZE / 1024 / 1024 / 1024))GB) is smaller than volume ($((VOLUME_SIZE / 1024 / 1024 / 1024))GB), forcing partition resize..."
+                  # Force partition resize by specifying the end sector
+                  sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" -f || {
+                    echo "⚠️  growpart failed, trying alternative method..."
+                    # Alternative: use parted to resize
+                    sudo parted "$BLOCK_DEVICE" resizepart "$PARTITION_NUM" 100% || echo "⚠️  parted resize also failed"
+                  }
+                else
+                  echo "Resizing partition $BLOCK_DEVICE $PARTITION_NUM..."
+                  sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" || {
+                    echo "⚠️  growpart failed or partition already at max size (this is OK if volume wasn't expanded)"
+                  }
+                fi
                 
                 # Resize the filesystem
                 echo "Resizing filesystem on $REAL_DEVICE..."
@@ -1509,18 +1526,30 @@ jobs:
                 FSTYPE=$(findmnt -n -o FSTYPE / || mount | grep "$REAL_DEVICE" | awk '{print $5}' || echo "")
                 echo "Filesystem type: ${FSTYPE:-unknown}"
                 
+                # Get current partition size and filesystem size for comparison
+                PARTITION_SIZE=$(sudo blockdev --getsize64 "$REAL_DEVICE" 2>/dev/null || echo "0")
+                echo "Partition size: $((PARTITION_SIZE / 1024 / 1024 / 1024))GB"
+                
                 if [ "$FSTYPE" = "xfs" ]; then
                   echo "Using xfs_growfs for XFS filesystem..."
                   sudo xfs_growfs / || echo "⚠️  xfs_growfs failed, continuing..."
                 elif [ -n "$FSTYPE" ]; then
                   echo "Using resize2fs for $FSTYPE filesystem..."
-                  sudo resize2fs "$REAL_DEVICE" || echo "⚠️  resize2fs failed, continuing..."
+                  # Force resize even if resize2fs says nothing to do
+                  # This handles the case where partition was resized but filesystem wasn't
+                  sudo resize2fs -f "$REAL_DEVICE" 2>&1 || {
+                    echo "⚠️  resize2fs failed, trying without -f flag..."
+                    sudo resize2fs "$REAL_DEVICE" || echo "⚠️  resize2fs failed, continuing..."
+                  }
                 else
                   # Try both methods if detection failed
                   echo "Filesystem type unknown, trying xfs_growfs first..."
                   sudo xfs_growfs / 2>/dev/null || {
-                    echo "xfs_growfs failed, trying resize2fs..."
-                    sudo resize2fs "$REAL_DEVICE" || echo "⚠️  Both resize methods failed, continuing..."
+                    echo "xfs_growfs failed, trying resize2fs with force..."
+                    sudo resize2fs -f "$REAL_DEVICE" 2>&1 || {
+                      echo "resize2fs -f failed, trying without force..."
+                      sudo resize2fs "$REAL_DEVICE" || echo "⚠️  Both resize methods failed, continuing..."
+                    }
                   }
                 fi
                 
@@ -1803,8 +1832,10 @@ jobs:
             
             echo "Starting monitoring stack..."
             # Démarrer avec gestion d'erreur pour le réseau
+            # ⭐ IMPORTANT: Utiliser --pull never pour éviter de re-pull les images déjà présentes
+            # Cela évite les problèmes d'espace disque lors du démarrage
             set +e  # Ne pas arrêter sur les erreurs
-            $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+            $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never
             COMPOSE_EXIT_CODE=$?
             set -e  # Réactiver l'arrêt sur erreur
             
@@ -1827,7 +1858,7 @@ jobs:
                 docker network rm monitoring-network 2>/dev/null || docker network prune -f
                 sleep 3
                 echo "Retrying startup..."
-                $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans
+                $COMPOSE_CMD -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans --pull never
               else
                 echo "ERROR: Non-network related error, see logs"
                 $COMPOSE_CMD -f docker-compose.monitoring.yml logs
