@@ -76,12 +76,7 @@
                 "showThresholdMarkers": true
             },
             "pluginVersion": "8.0.0",
-            "targets": [
-                {
-                    "expr": "up{job=\"staging-backend\"} or vector(0)",
-                    "refId": "A"
-                }
-            ],
+            "targets": [],
             "title": "Application Status",
             "type": "gauge"
         },
