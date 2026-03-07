@@ -1444,6 +1444,74 @@ jobs:
             set -euo pipefail
             cd ${{ env.MONITORING_DIR }}
             
+            # ⭐ CRITICAL: Resize filesystem if EBS volume was expanded
+            # This is necessary when the EBS volume size was increased but the filesystem wasn't resized
+            echo "Checking and resizing filesystem if needed..."
+            echo "Current disk usage:"
+            df -h / | tail -1
+            
+            # Get the root device (usually /dev/xvda1 or /dev/nvme0n1p1)
+            ROOT_DEVICE=$(df / | tail -1 | awk '{print $1}')
+            
+            # Detect block device and partition number
+            # For /dev/xvda1 -> BLOCK_DEVICE=/dev/xvda, PARTITION_NUM=1
+            # For /dev/nvme0n1p1 -> BLOCK_DEVICE=/dev/nvme0n1, PARTITION_NUM=1
+            if echo "$ROOT_DEVICE" | grep -q "nvme"; then
+              # NVMe: /dev/nvme0n1p1 -> /dev/nvme0n1, partition 1
+              BLOCK_DEVICE=$(echo "$ROOT_DEVICE" | sed 's/p[0-9]*$//')
+              PARTITION_NUM=$(echo "$ROOT_DEVICE" | grep -o 'p[0-9]*$' | sed 's/p//')
+            else
+              # Standard: /dev/xvda1 -> /dev/xvda, partition 1
+              BLOCK_DEVICE=$(echo "$ROOT_DEVICE" | sed 's/[0-9]*$//')
+              PARTITION_NUM=$(echo "$ROOT_DEVICE" | grep -o '[0-9]*$')
+            fi
+            
+            # Default to partition 1 if not detected
+            if [ -z "$PARTITION_NUM" ]; then
+              PARTITION_NUM="1"
+            fi
+            
+            echo "Root filesystem: $ROOT_DEVICE"
+            echo "Block device: $BLOCK_DEVICE"
+            echo "Partition number: $PARTITION_NUM"
+            
+            # Check if growpart is available
+            if command -v growpart &> /dev/null; then
+              echo "Resizing partition $BLOCK_DEVICE $PARTITION_NUM..."
+              sudo growpart "$BLOCK_DEVICE" "$PARTITION_NUM" || {
+                echo "⚠️  growpart failed or partition already at max size (this is OK if volume wasn't expanded)"
+              }
+              
+              # Resize the filesystem
+              echo "Resizing filesystem on $ROOT_DEVICE..."
+              # Detect filesystem type
+              FSTYPE=$(mount | grep "$ROOT_DEVICE" | awk '{print $5}' || echo "")
+              echo "Filesystem type: ${FSTYPE:-unknown}"
+              
+              if [ "$FSTYPE" = "xfs" ]; then
+                echo "Using xfs_growfs for XFS filesystem..."
+                sudo xfs_growfs / || echo "⚠️  xfs_growfs failed, continuing..."
+              elif [ -n "$FSTYPE" ]; then
+                echo "Using resize2fs for $FSTYPE filesystem..."
+                sudo resize2fs "$ROOT_DEVICE" || echo "⚠️  resize2fs failed, continuing..."
+              else
+                # Try both methods if detection failed
+                echo "Filesystem type unknown, trying xfs_growfs first..."
+                sudo xfs_growfs / 2>/dev/null || {
+                  echo "xfs_growfs failed, trying resize2fs..."
+                  sudo resize2fs "$ROOT_DEVICE" || echo "⚠️  Both resize methods failed, continuing..."
+                }
+              fi
+              
+              echo "Disk usage after resize:"
+              df -h / | tail -1
+            else
+              echo "⚠️  growpart not available, skipping filesystem resize"
+              echo "   If EBS volume was expanded, resize manually:"
+              echo "   sudo growpart /dev/xvda 1"
+              echo "   sudo resize2fs /dev/xvda1"
+            fi
+            
             echo "Verifying configuration files..."
             if [ ! -f "docker-compose.monitoring.yml" ]; then
               echo "ERROR: docker-compose.monitoring.yml not found!"
