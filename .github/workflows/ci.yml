@@ -1626,8 +1626,47 @@ jobs:
             }
             COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
             
+            # ⭐ AMÉLIORATION: Supprimer les anciennes images AVANT de pull les nouvelles
+            # Cela libère de l'espace avant d'extraire les nouvelles images
+            echo "Removing old monitoring images before pulling new ones..."
+            MONITORING_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(grafana|prometheus|alertmanager|node-exporter|cadvisor|promtail)" || true)
+            if [ -n "$MONITORING_IMAGES" ]; then
+              echo "Found existing monitoring images, removing them to free space..."
+              echo "$MONITORING_IMAGES" | xargs -r docker rmi -f 2>/dev/null || true
+              # Nettoyer les images orphelines après suppression
+              docker image prune -f || true
+              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              echo "Disk usage after removing old images: ${DISK_USAGE}%"
+            fi
+            
+            # Vérifier à nouveau l'espace avant pull
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            if [ "$DISK_USAGE" -gt 90 ]; then
+              echo "⚠️  WARNING: Disk usage still high (${DISK_USAGE}%), attempting additional cleanup..."
+              # Supprimer toutes les images non utilisées
+              docker image prune -af || true
+              # Nettoyer les volumes non utilisés (mais pas ceux du monitoring)
+              docker volume ls --format "{{.Name}}" | grep -v -E "(grafana|prometheus|loki|alertmanager)" | xargs -r docker volume rm 2>/dev/null || true
+              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              echo "Disk usage after aggressive cleanup: ${DISK_USAGE}%"
+            fi
+            
+            # Si toujours trop plein, erreur
+            if [ "$DISK_USAGE" -gt 92 ]; then
+              echo "❌ ERROR: Disk usage too high (${DISK_USAGE}%) to safely pull images"
+              echo "   Minimum 8% free space required for image extraction"
+              echo "   Please increase EBS volume size or manually clean up"
+              df -h /
+              docker system df || true
+              exit 1
+            fi
+            
             echo "Pulling Docker images (disk usage: ${DISK_USAGE}%)..."
-            $COMPOSE_CMD -f docker-compose.monitoring.yml pull
+            # Pull avec --quiet pour réduire la sortie et économiser l'espace
+            $COMPOSE_CMD -f docker-compose.monitoring.yml pull --quiet || {
+              echo "⚠️  Pull with --quiet failed, retrying without --quiet..."
+              $COMPOSE_CMD -f docker-compose.monitoring.yml pull
+            }
             
             echo "Starting monitoring stack..."
             # Démarrer avec gestion d'erreur pour le réseau
