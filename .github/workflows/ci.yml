@@ -1913,5 +1913,3 @@ jobs:
           docker tag "$SOURCE_IMAGE" "$LATEST_IMAGE"
           docker push "$LATEST_IMAGE"
           echo "✓ Successfully pushed latest tag: $LATEST_IMAGE"
-#   T r i g g e r   w o r k f l o w  
- 
