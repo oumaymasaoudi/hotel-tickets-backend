@@ -1,83 +1,160 @@
 {
-  "dashboard": {
-    "title": "Backend Logs - Hotel Ticket Hub",
-    "tags": ["backend", "logs", "loki"],
-    "timezone": "browser",
-    "panels": [
+  "annotations": {
+    "list": [
       {
-        "id": 1,
-        "title": "Logs en temps réel",
-        "type": "logs",
-        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
-        "targets": [
-          {
-            "expr": "{container=\"hotel-ticket-hub-backend-staging\"}",
-            "refId": "A"
-          }
-        ],
-        "options": {
-          "dedupStrategy": "none",
-          "enableLogDetails": true,
-          "prettifyLogMessage": false,
-          "showCommonLabels": false,
-          "showLabels": false,
-          "showTime": true,
-          "sortOrder": "Descending",
-          "wrapLogMessage": false
-        }
-      },
-      {
-        "id": 2,
-        "title": "Comptage d'erreurs (5m)",
-        "type": "stat",
-        "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
-        "targets": [
-          {
-            "expr": "sum(count_over_time({container=\"hotel-ticket-hub-backend-staging\"} |= \"ERROR\" [5m]))",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {"mode": "thresholds"},
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"value": 0, "color": "green"},
-                {"value": 5, "color": "yellow"},
-                {"value": 10, "color": "red"}
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 3,
-        "title": "Logs par niveau",
-        "type": "piechart",
-        "gridPos": {"x": 6, "y": 8, "w": 9, "h": 4},
-        "targets": [
-          {
-            "expr": "sum by (level) (count_over_time({container=\"hotel-ticket-hub-backend-staging\"} | json [5m]))",
-            "refId": "A"
-          }
-        ]
-      },
-      {
-        "id": 4,
-        "title": "Erreurs uniquement",
-        "type": "logs",
-        "gridPos": {"x": 15, "y": 8, "w": 9, "h": 4},
-        "targets": [
-          {
-            "expr": "{container=\"hotel-ticket-hub-backend-staging\"} |= \"ERROR\"",
-            "refId": "A"
-          }
-        ]
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
-    ],
-    "refresh": "5s",
-    "schemaVersion": 27,
-    "version": 1
-  }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "expr": "{container=\"hotel-ticket-hub-backend-staging\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs en temps réel",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "green"
+              },
+              {
+                "value": 5,
+                "color": "yellow"
+              },
+              {
+                "value": 10,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "id": 2,
+      "options": {},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"hotel-ticket-hub-backend-staging\"} |= \"ERROR\" [5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Comptage d'erreurs (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "x": 6,
+        "y": 8,
+        "w": 9,
+        "h": 4
+      },
+      "id": 3,
+      "options": {},
+      "targets": [
+        {
+          "expr": "sum by (level) (count_over_time({container=\"hotel-ticket-hub-backend-staging\"} | json [5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs par niveau",
+      "type": "piechart"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "x": 15,
+        "y": 8,
+        "w": 9,
+        "h": 4
+      },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "expr": "{container=\"hotel-ticket-hub-backend-staging\"} |= \"ERROR\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Erreurs uniquement",
+      "type": "logs"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [
+    "backend",
+    "logs",
+    "loki"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Backend Logs - Hotel Ticket Hub",
+  "uid": "backend-logs",
+  "version": 1
 }
